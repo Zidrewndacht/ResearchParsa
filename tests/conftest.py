@@ -47,6 +47,13 @@ os.makedirs(os.environ["PARSA_DATA_DIR"], exist_ok=True)
 
 from shared import config, db
 
+_worker_log_dir = tempfile.mkdtemp(prefix="parsa_test_logs_")
+os.environ["PARSA_LOG_DIR"] = _worker_log_dir
+os.makedirs(_worker_log_dir, exist_ok=True)
+
+_worker_backup_dir = tempfile.mkdtemp(prefix="parsa_test_backup_")
+os.environ["PARSA_BACKUP_DIR"] = _worker_backup_dir
+os.makedirs(_worker_backup_dir, exist_ok=True)
 
 @pytest.fixture()
 def test_db(tmp_path, monkeypatch):

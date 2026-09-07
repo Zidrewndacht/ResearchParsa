@@ -240,7 +240,9 @@ def restore_database():
 
             # Backup current data before restoring (single file name, overwrites previous)
             backup_current = "backup_before_restore.parsa.tzst"
-            backup_current_path = os.path.join(os.getcwd(), backup_current)
+            # PARSA_BACKUP_DIR lets tests isolate this file; production default (CWD) is unchanged.
+            backup_dir = os.environ.get("PARSA_BACKUP_DIR") or os.getcwd()
+            backup_current_path = os.path.join(backup_dir, backup_current)
             cctx = zstd.ZstdCompressor(level=1)
             with cctx.stream_writer(open(backup_current_path, 'wb')) as compressor:
                 with tarfile.open(fileobj=compressor, mode='w|') as tar:
