@@ -1,5 +1,7 @@
 import json
+
 from shared import db
+
 
 class TestTextFieldMerging:
     """Text fields are de-duplicated case-insensitively after stripping

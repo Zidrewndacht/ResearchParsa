@@ -1,7 +1,6 @@
 # tests/e2e/test_html_export.py
 import re
 
-import pytest
 from playwright.sync_api import expect
 
 

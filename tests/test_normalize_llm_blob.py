@@ -1,6 +1,7 @@
 # tests/test_normalize_llm_blob.py
 """Unit tests for the write-time blob normalization function."""
 import pytest
+
 from shared.db import normalize_llm_blob
 
 BOOL_FIELDS = ["is_offtopic", "features.smt"]

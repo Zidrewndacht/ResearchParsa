@@ -4,7 +4,8 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from shared import config   
+
+from shared import config
 
 _db_path = None
 

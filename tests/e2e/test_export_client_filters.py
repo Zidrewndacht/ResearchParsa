@@ -8,6 +8,7 @@ These behaviors are structurally different and must be tested separately.
 """
 from conftest import goto_export, goto_live, visible_ids
 
+
 class TestExportClientYearFilter:
     def test_year_from_narrows_client_side(self, page, app_server):
         goto_export(page, app_server, hide_offtopic=0)

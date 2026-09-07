@@ -1,4 +1,5 @@
 import pytest
+
 from conftest import EXPECTED_ASC, INITIAL_DOM_ORDER, visible_ids
 
 SORT_COLUMNS = list(EXPECTED_ASC.keys())

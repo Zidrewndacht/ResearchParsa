@@ -1,4 +1,4 @@
-from conftest import goto_live, visible_ids, ON_TOPIC
+from conftest import ON_TOPIC, goto_live
 
 
 class TestFooterCounts:

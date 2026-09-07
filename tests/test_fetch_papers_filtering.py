@@ -1,4 +1,5 @@
 import pytest
+
 from shared import db
 
 # After write-time normalization, the classification column only ever

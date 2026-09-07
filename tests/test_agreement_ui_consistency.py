@@ -2,7 +2,9 @@
 """After write-time normalization, the agreement report and the main UI
 must produce consistent results for the same votes."""
 import json
+
 import pytest
+
 from meta import agreement_core
 from shared import db
 

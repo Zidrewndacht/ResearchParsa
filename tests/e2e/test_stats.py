@@ -4,7 +4,6 @@ Statistics modal: list contents, chart datasets, metrics table, LaTeX copy
 and recomputation after filtering — verified against independently computed
 expectations from the crafted seed, on live app and static export.
 """
-import pytest
 
 from conftest import goto_export, goto_live
 

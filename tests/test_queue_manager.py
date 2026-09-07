@@ -20,15 +20,18 @@ import time
 
 import pytest
 
-from shared import config, db
 from queue_manager import create_queue_app
 from queue_manager.dispatcher import _send_to_vllm_sync, can_admit_task, dispatcher_loop
 from queue_manager.state import (
-    TASK_CLASSIFY, TASK_VERIFY, TASK_RECLASSIFY,
-    ClassificationStateMachine, VerificationStateMachine, ConsensusStateMachine,
+    TASK_CLASSIFY,
+    TASK_RECLASSIFY,
+    TASK_VERIFY,
+    ClassificationStateMachine,
+    ConsensusStateMachine,
+    VerificationStateMachine,
     state,
 )
-
+from shared import config, db
 
 # ============================================================================
 # Fixtures

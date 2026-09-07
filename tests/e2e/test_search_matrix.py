@@ -1,6 +1,8 @@
 import re
+
 import pytest
 from playwright.sync_api import expect
+
 from conftest import visible_ids
 
 # (query, expected visible ids in DOM order)

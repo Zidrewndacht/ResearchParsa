@@ -4,10 +4,17 @@ Tri-state and inclusion filtering, tested on BOTH the live server-rendered
 app and the client-only static HTML export.
 """
 import re
+
 from playwright.sync_api import expect
+
 from conftest import (
-    INITIAL_DOM_ORDER, ON_TOPIC, VISIBLE_ROW, cycle_tri, set_inclusion,
-    visible_ids, TRI_ONLY_TRUE, TRI_ONLY_FALSEISH
+    INITIAL_DOM_ORDER,
+    ON_TOPIC,
+    TRI_ONLY_FALSEISH,
+    TRI_ONLY_TRUE,
+    cycle_tri,
+    set_inclusion,
+    visible_ids,
 )
 
 INCLUSION_SETS = {"test_inclusion": {"p1", "p2", "p4", "p6"},

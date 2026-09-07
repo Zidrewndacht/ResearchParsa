@@ -6,9 +6,9 @@ import shutil
 import sys
 import threading
 from datetime import datetime, timezone
-from openai import OpenAI, APIConnectionError, APITimeoutError
 
 import yaml
+from openai import APIConnectionError, APITimeoutError, OpenAI
 
 DEBUG_MODE = False  # True = Flask Dev Server (auto-reload). False = Waitress (Production).
 

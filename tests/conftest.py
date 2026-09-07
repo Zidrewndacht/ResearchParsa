@@ -1,8 +1,9 @@
 # tests/conftest.py
 import json
 import os
-import pytest
 import tempfile
+
+import pytest
 
 # ==============================================================================
 # MUST execute BEFORE any app imports
@@ -45,7 +46,6 @@ os.environ["PARSA_DATA_DIR"] = _worker_data_dir
 os.makedirs(os.environ["PARSA_DATA_DIR"], exist_ok=True)
 
 from shared import config, db
-
 
 
 @pytest.fixture()
