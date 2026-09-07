@@ -14,6 +14,23 @@ default_min_page_count: 4
 llm_server_url: "http://localhost:8086"
 llm_api_key: null   #optional, unused for local vLLM instance.
 
+# Forwarded verbatim to the OpenAI-compatible chat completions endpoint.
+# Every key except the reserved `extra_body` becomes a named argument to
+# client.chat.completions.create(); `extra_body` is merged into the raw JSON
+# body for server-specific options the SDK doesn't know about.
+# Mirrors the official Qwen3.8 OpenAI-SDK example.
+llm_params:
+  temperature: 1.0
+  top_p: 0.95
+  max_tokens: 131072
+  reasoning_effort: low          # Qwen3.8: xhigh | medium | low
+  extra_body:
+    top_k: 20
+    min_p: 0
+    chat_template_kwargs:
+      enable_thinking: true
+      preserve_thinking: true
+
 # Concurrency Limits - example values for 2x24GB on Qwen3.6 27B vLLM 0.26
 max_concurrent_workers_classify: 75
 max_concurrent_workers_verify: 80

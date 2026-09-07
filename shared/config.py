@@ -6,8 +6,8 @@ import shutil
 import sys
 import threading
 from datetime import datetime, timezone
+from openai import OpenAI, APIConnectionError, APITimeoutError
 
-import requests
 import yaml
 
 DEBUG_MODE = False  # True = Flask Dev Server (auto-reload). False = Waitress (Production).
@@ -88,7 +88,7 @@ FRESH_CLASSIFY_FALLBACK_ITERATION = _general_config['fresh_classify_fallback_ite
 
 LLM_SERVER_URL = _general_config['llm_server_url']
 LLM_API_KEY = _general_config.get('llm_api_key')  # Allowed to be null/missing
-
+LLM_PARAMS = _general_config.get('llm_params', {})
 
 # ==============================================================================
 # 2. DOMAIN CONFIG & PROMPT ENGINE (domain_config.yaml)
@@ -289,25 +289,20 @@ def get_set_data(paper_data, set_num):
     return data
 
 def get_model_alias(server_url_base):
-    models_url = f"{server_url_base.rstrip('/')}/v1/models"
-    headers = {"Content-Type": "application/json"}
-    if LLM_API_KEY:
-        headers["Authorization"] = f"Bearer {LLM_API_KEY}"
-
+    client = OpenAI(
+        base_url=f"{server_url_base.rstrip('/')}/v1",
+        api_key=LLM_API_KEY or "EMPTY",
+        timeout=30.0,
+    )
     try:
-        response = requests.get(models_url, headers=headers, timeout=30)
-        response.raise_for_status()
-        models_data = response.json()
-
-        if models_data and isinstance(models_data.get('data'), list) and models_data['data']:
-            model_alias = models_data['data'][0].get('id')
+        models = client.models.list()
+        if models and models.data:
+            model_alias = models.data[0].id
             if model_alias:
                 print(f"Detected model alias: '{model_alias}'")
                 return model_alias
-    except requests.exceptions.RequestException as e:
+    except Exception as e: #noqa BLE001
         print(f"Error connecting to LLM server: {e}")
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON response: {e}")
 
     fallback_alias = "Unknown_LLM"
     print(f"Using fallback model alias: '{fallback_alias}'")
@@ -334,84 +329,73 @@ def get_best_set_for_text_fields(paper_data):
 def send_prompt_to_llm(prompt_text, server_url_base=None, model_name="default", is_verification=False):
     if server_url_base is None:
         server_url_base = LLM_SERVER_URL
-        
-    chat_url = f"{server_url_base.rstrip('/')}/v1/chat/completions"
-    headers = {"Content-Type": "application/json"}
-    if LLM_API_KEY:
-        headers["Authorization"] = f"Bearer {LLM_API_KEY}"
-  
-    payload = {
-        "model": model_name,
-        "messages": [{"role": "user", "content": prompt_text}],
-        "temperature": 0.6,
-        "top_p": 0.95,
-        "top_k": 20,
-        "min_p": 0,
-        "max_tokens": 32768,
-        "stream": False,
-        "chat_template_kwargs": {"enable_thinking": True}
-    }
-    
+
     context = "verification " if is_verification else ""
-    
+
+    # vLLM needs no real key, but the SDK requires a non-empty string.
+    client = OpenAI(
+        base_url=f"{server_url_base.rstrip('/')}/v1",
+        api_key=LLM_API_KEY or "EMPTY",
+        timeout=7200.0,  # vLLM generations can run very long; do NOT lower this
+    )
+
+    # Split the one reserved key (`extra_body`) from the named arguments.
+    # Everything else is forwarded to create() verbatim.
+    create_kwargs = dict(LLM_PARAMS)
+    extra_body = create_kwargs.pop('extra_body', None)
+    if extra_body:
+        create_kwargs['extra_body'] = extra_body
+
     try:
         if is_shutdown_flag_set():
             return None, None, None
-        # vLLM requests may take hours to complete and should not be discarded. 
-        # This is by design, Do NOT reduce this timeout.
-        response = requests.post(chat_url, headers=headers, json=payload, timeout=7200)
-        
+
+        completion = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt_text}],
+            stream=False,
+            **create_kwargs,
+        )
+
         if is_shutdown_flag_set():
             return None, None, None
-            
-        response.raise_for_status()
-        response_data = response.json()
-        model_name_from_response = response_data.get('model', model_name)
-        
-        if response_data.get('choices'):
-            message = response_data['choices'][0]['message']
-            reasoning_content_raw = message.get('reasoning', '')
-            if reasoning_content_raw is None or reasoning_content_raw == '':
-                reasoning_content_raw = message.get('reasoning_content', '')
-                
-            reasoning_content = reasoning_content_raw.strip() if reasoning_content_raw else ''
-            content_raw = message.get('content', '')
-            content = content_raw.strip() if content_raw is not None else ''
-            
-            if not reasoning_content and content:
-                think_pattern = r'<think>(.*?)</think>'
-                think_matches = re.findall(think_pattern, content, re.DOTALL | re.IGNORECASE)
-                if think_matches:
-                    reasoning_content = think_matches[0].strip()
-                    content = re.sub(think_pattern, '', content, flags=re.DOTALL | re.IGNORECASE).strip()
-                    
-            content = re.sub(r'\n\s*\n', '\n', content)
-            content = content.strip()
-            
-            return content, model_name_from_response, reasoning_content
-        else:
-            print(f"Warning: Unexpected LLM {context}response structure: {response_data}")
+
+        model_name_from_response = completion.model or model_name
+
+        if not completion.choices:
+            print(f"Warning: Unexpected LLM {context}response structure: {completion}")
             return None, model_name_from_response, None
 
-    except requests.exceptions.ConnectionError as e:
+        message = completion.choices[0].message
+
+        content_raw = message.content
+        content = content_raw.strip() if content_raw is not None else ''
+
+        # Qwen/vLLM expose the trace as `reasoning_content` (some builds as
+        # `reasoning`) -- same two-name probe as the official Qwen example.
+        reasoning_content = getattr(message, 'reasoning_content', None) \
+            or getattr(message, 'reasoning', None)
+        reasoning_content = reasoning_content.strip() if reasoning_content else ''
+
+        # Fallback: trace embedded in the content with <think> tags
+        if not reasoning_content and content:
+            think_pattern = r'<think>(.*?)</think>'
+            think_matches = re.findall(think_pattern, content, re.DOTALL | re.IGNORECASE)
+            if think_matches:
+                reasoning_content = think_matches[0].strip()
+                content = re.sub(think_pattern, '', content, flags=re.DOTALL | re.IGNORECASE).strip()
+                content = re.sub(r'\n\s*\n', '\n', content)
+                content = content.strip()
+
+        return content, model_name_from_response, reasoning_content
+
+    except APIConnectionError as e:
         error_msg = f"Connection Error: Could not connect to LLM server at {server_url_base}. {e!s}"
         print(f"Error sending {context}request to LLM server: {error_msg}")
         return None, model_name, error_msg
-    except requests.exceptions.Timeout as e:
+    except APITimeoutError as e:
         error_msg = f"Timeout Error: LLM server did not respond within the timeout period. {e!s}"
         print(f"Error sending {context}request to LLM server: {error_msg}")
-        return None, model_name, error_msg
-    except requests.exceptions.RequestException as e:
-        error_msg = f"Request Error: {e!s}"
-        if hasattr(e, 'response') and e.response:
-            error_msg += f"\nResponse Text: {e.response.text}"
-        print(f"Error sending {context}request to LLM server: {error_msg}")
-        return None, model_name, error_msg
-    except json.JSONDecodeError as e:
-        error_msg = f"JSON Decode Error: {e!s}"
-        if 'response' in locals():
-            error_msg += f"\nResponse Text: {response.text}"
-        print(f"Error decoding JSON {context}response: {error_msg}")
         return None, model_name, error_msg
     except Exception as e:
         error_msg = f"Unexpected Error: {type(e).__name__}: {e!s}"
