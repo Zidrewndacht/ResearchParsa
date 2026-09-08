@@ -22,8 +22,8 @@ llm_api_key: null   #optional, unused for local vLLM instance.
 llm_params:
   temperature: 1.0
   top_p: 0.95
-  max_tokens: 131072
-  reasoning_effort: low          # Qwen3.8: xhigh | medium | low
+  max_tokens: 81920
+  reasoning_effort: medium          # Qwen3.8: xhigh | medium | low
   extra_body:
     top_k: 20
     min_p: 0

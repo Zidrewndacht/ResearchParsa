@@ -309,6 +309,15 @@ OK      Add a viewer for meta-stats (3run stats)
 OK              Essentially include the corresponding meta scripts in the frontend + LaTeX generators, but how/where?
                       Human compare wouldn't make much sense as it needs 2 separate DBs.
 
+OK      Add unit/integration tests
+OK      Add E2E tests
+
+OK      Update LLM client to standard openAI
+
+OK      Update requirements: ruff, pytest, pytest-cov, pytest-xdist, 
+
+OK      fix backup test side effect: backup_before_restore.parsa.tzst is inadvertently replaced by test backup via side effect.
+
         Add sequential onboarding with LLM usage for prompted domain_config creation?
                 Use a complete separate Flask app -- avoids unnecessary changes to perfectly working webapp for something used rarely.
                 Start with PCB AOI defaults for manual edit/setup if no LLM available.
@@ -325,7 +334,8 @@ OK              Essentially include the corresponding meta scripts in the fronte
         Add a button in history for agent trace review report: reads the complete log stream (from oldest to newest per set) from all sets and reports issues/explains conflicts across sets, etc.
                 Adds a colored entry in the main log with the report but does NOT recalculates main set.
 
-        Add multilingual UI support
+        Add multilingual UI support?
 
         Fix regression: detail row animation missing *sometimes*?
-        fix backup test side effect: backup_before_restore.parsa.tzst is inadvertently replaced by test backup via side effect.
+
+        Add a manual fast screening pass (to be used with a simpler model, prefer false positives)
