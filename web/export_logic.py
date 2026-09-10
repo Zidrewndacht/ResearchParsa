@@ -119,8 +119,9 @@ def prepare_history_log_data(paper_dict, set_num=None):
 
     # PASS 1: Ascending order - Mark changed cells (valid entries only)
     # averaged_llm IS included here so changes between averaged states are highlighted.
+    # screener IS included so its off-topic flag highlights the changed cells.
     table_entries = [e for e in log_entries
-                     if e.get('type') in ['classifier', 'consensus', 'averaged_llm', 'user']
+                     if e.get('type') in ['classifier', 'consensus', 'averaged_llm', 'user', 'screener']
                      and e.get('valid', False)]
                      
     for i in range(len(table_entries)):

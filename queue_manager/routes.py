@@ -19,6 +19,7 @@ from .logging_utils import (
 from .state import (
     ClassificationStateMachine,
     ConsensusStateMachine,
+    ScreeningStateMachine,
     VerificationStateMachine,
     log_queue_status,
     state,
@@ -305,6 +306,81 @@ def handle_consensus_route():
         log_queue_status()
         return jsonify({'status': 'queued', 'papers_queued': len(paper_set_pairs), 'tasks_queued': total_tasks}), 200
 
+@queue_bp.route('/screen', methods=['POST'])
+def handle_screen_route():
+    """Batch quick-screen: flag obviously off-topic papers, leave everything else untouched."""
+    client = request.remote_addr
+    data = request.get_json(silent=True) or {}
+    mode = data.get('mode', 'remaining')
+    log(f"{_color_prefix('SCREEN REQUEST:', Colors.REQUEST)} from {client}: mode={_color_mode(mode)}")
+    log_file_request('/screen', client, mode, None)
+
+    # Screening needs its own template, its own (thinking-disabled) params, and its own
+    # concurrency limit. Fail loudly if any is missing — never fall back to the full
+    # classification setup, which would defeat the whole point of screening.
+    screen_template = config.SCREENING_PROMPT_TEMPLATE
+    screen_params = config.SCREENING_LLM_PARAMS
+    screen_limit = config.MAX_CONCURRENT_WORKERS_SCREEN
+    if not screen_template:
+        return jsonify({'error': 'Screening prompt template not configured (domain_config.yaml: prompts.screening_template)'}), 500
+    if not screen_params:
+        return jsonify({'error': 'screening_llm_params not configured in config.yaml'}), 500
+    if not screen_limit:
+        return jsonify({'error': 'max_concurrent_workers_screen not configured in config.yaml'}), 500
+
+    try:
+        model_alias = config.get_model_alias(config.LLM_SERVER_URL)
+    except Exception as e:
+        return jsonify({'error': f'Failed to get model alias: {e}'}), 500
+
+    # Screening only ever targets unclassified sets (same gate as classify 'remaining'),
+    # so it is inherently non-destructive regardless of the requested mode.
+    with db.get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, 1 as set_num FROM papers
+            WHERE (set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL)
+            AND NOT EXISTS (
+                SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
+                WHERE json_extract(value, '$.type') = 'screener'
+                AND json_extract(value, '$.valid') = 1
+            )
+            UNION ALL
+            SELECT id, 2 FROM papers
+            WHERE (set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL)
+            AND NOT EXISTS (
+                SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
+                WHERE json_extract(value, '$.type') = 'screener'
+                AND json_extract(value, '$.valid') = 1
+            )
+            UNION ALL
+            SELECT id, 3 FROM papers
+            WHERE (set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL)
+            AND NOT EXISTS (
+                SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
+                WHERE json_extract(value, '$.type') = 'screener'
+                AND json_extract(value, '$.valid') = 1
+            )
+            ORDER BY id, set_num
+        """)
+        paper_set_pairs = cursor.fetchall()
+
+    log(f"{_color_prefix('DB QUERY:', Colors.DB)} screen found {len(paper_set_pairs)} unclassified paper×set pairs")
+    if not paper_set_pairs:
+        return jsonify({'status': 'queued', 'papers_queued': 0}), 200
+
+    total_tasks = 0
+    for pid, set_num in paper_set_pairs:
+        sm = ScreeningStateMachine(pid, set_num, screen_template, model_alias, screen_params)
+        for task in sm.get_prompts():
+            state.enqueue(task)
+        total_tasks += 1
+
+    unique_papers = len({p[0] for p in paper_set_pairs})
+    log(f"{_color_prefix('BATCH ENQUEUE:', Colors.BATCH)} screen papers={unique_papers} tasks={total_tasks}")
+    log_queue_status()
+    return jsonify({'status': 'queued', 'papers_queued': len(paper_set_pairs), 'tasks_queued': total_tasks}), 200
+
 
 @queue_bp.route('/review_traces', methods=['POST'])
 def handle_review_traces():
@@ -374,6 +450,8 @@ def handle_review_traces():
     db.append_trace_review_log(paper_id, model_name, reasoning_trace, content, valid=True)
     log(f"{_color_prefix('COMPLETE:', Colors.VLLM_COMPLETE)} trace review paper={paper_id}")
     return jsonify({'status': 'success', 'paper_id': paper_id})
+
+
 
 @queue_bp.app_errorhandler(404)
 def not_found(e):

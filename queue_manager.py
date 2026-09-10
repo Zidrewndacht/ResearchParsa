@@ -38,7 +38,7 @@ def main():
     log(f"{_color_prefix('STARTUP:', Colors.DISPATCHER)} {'=' * 52}")
     log(f"vLLM Server: {config.LLM_SERVER_URL}")
     log(f"HTTP API: http://{config.QUEUE_MANAGER_HOST}:{config.QUEUE_MANAGER_PORT}")
-    log(f"Concurrency Limits: classify={config.MAX_CONCURRENT_WORKERS_CLASSIFY} verify={config.MAX_CONCURRENT_WORKERS_VERIFY} reclassify={config.MAX_CONCURRENT_WORKERS_RECLASSIFY} mixed_threshold={config.MIN_CONCURRENT_WORKERS}")
+    log(f"Concurrency Limits: classify={config.MAX_CONCURRENT_WORKERS_CLASSIFY} verify={config.MAX_CONCURRENT_WORKERS_VERIFY} reclassify={config.MAX_CONCURRENT_WORKERS_RECLASSIFY} screen={config.MAX_CONCURRENT_WORKERS_SCREEN} mixed_threshold={config.MIN_CONCURRENT_WORKERS}")
     log("=" * 60)
 
     dispatcher_thread = threading.Thread(target=dispatcher_loop, daemon=True)

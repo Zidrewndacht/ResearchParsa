@@ -81,6 +81,7 @@ QUEUE_MANAGER_WAITRESS_THREADS = 32        # Intentionally hardcoded setting (no
 MAX_CONCURRENT_WORKERS_CLASSIFY = _general_config['max_concurrent_workers_classify']
 MAX_CONCURRENT_WORKERS_VERIFY = _general_config['max_concurrent_workers_verify']
 MAX_CONCURRENT_WORKERS_RECLASSIFY = _general_config['max_concurrent_workers_reclassify']
+MAX_CONCURRENT_WORKERS_SCREEN = _general_config['max_concurrent_workers_screen']
 MIN_CONCURRENT_WORKERS = _general_config['min_concurrent_workers']
 
 MAX_CONSENSUS_ITERATIONS = _general_config['max_consensus_iterations']
@@ -88,7 +89,8 @@ FRESH_CLASSIFY_FALLBACK_ITERATION = _general_config['fresh_classify_fallback_ite
 
 LLM_SERVER_URL = _general_config['llm_server_url']
 LLM_API_KEY = _general_config.get('llm_api_key')  # Allowed to be null/missing
-LLM_PARAMS = _general_config.get('llm_params', {})
+LLM_PARAMS = _general_config.get('llm_params')
+SCREENING_LLM_PARAMS = _general_config.get('screening_llm_params')
 
 # ==============================================================================
 # 2. DOMAIN CONFIG & PROMPT ENGINE (domain_config.yaml)
@@ -205,6 +207,13 @@ def load_domain_config():
     except Exception as e:
         raise RuntimeError(f"Fatal: Failed to assemble prompt templates: {e}")
 
+    # Screening prompt: standalone, self-contained template.
+    screening_relpath = prompts_cfg.get('screening_template')
+    cfg['SCREENING_PROMPT_TEMPLATE'] = (
+        _load_text_file(os.path.join(BASE_DIR, screening_relpath))
+        if screening_relpath else None
+    )
+
     # Inject generated CSS into the config dictionary for templates to use
     cfg["theme_css"] = generate_theme_css(cfg)
     return cfg
@@ -214,6 +223,7 @@ _domain_config = load_domain_config()
 PROMPT_TEMPLATE = _domain_config.get('PROMPT_TEMPLATE')
 VERIFIER_TEMPLATE = _domain_config.get('VERIFIER_TEMPLATE')
 RECLASSIFY_PROMPT_TEMPLATE = _domain_config.get('RECLASSIFY_PROMPT_TEMPLATE')
+SCREENING_PROMPT_TEMPLATE = _domain_config.get('SCREENING_PROMPT_TEMPLATE')
 
 TYPE_EMOJIS = {
     'article': '📄',
@@ -326,26 +336,24 @@ def get_best_set_for_text_fields(paper_data):
     best_set = max(set_scores, key=lambda x: x[1])[0]
     return best_set
 
-def send_prompt_to_llm(prompt_text, server_url_base=None, model_name="default", is_verification=False):
+def send_prompt_to_llm(prompt_text, server_url_base=None, model_name="default", is_verification=False, llm_params=None):
     if server_url_base is None:
         server_url_base = LLM_SERVER_URL
-
     context = "verification " if is_verification else ""
 
-    # vLLM needs no real key, but the SDK requires a non-empty string.
     client = OpenAI(
         base_url=f"{server_url_base.rstrip('/')}/v1",
         api_key=LLM_API_KEY or "EMPTY",
-        timeout=7200.0,  # vLLM generations can run very long; do NOT lower this
+        timeout=7200.0,
     )
 
-    # Split the one reserved key (`extra_body`) from the named arguments.
-    # Everything else is forwarded to create() verbatim.
-    create_kwargs = dict(LLM_PARAMS)
+    # Screening passes its own full param set; everyone else uses the global one.
+    params = llm_params if llm_params is not None else LLM_PARAMS
+    create_kwargs = dict(params)
     extra_body = create_kwargs.pop('extra_body', None)
     if extra_body:
         create_kwargs['extra_body'] = extra_body
-
+        
     try:
         if is_shutdown_flag_set():
             return None, None, None
@@ -408,18 +416,10 @@ _domain_config = load_domain_config()
 
 # --- User-editable prompt template discovery (backup/restore) ---
 USER_PROMPT_TEMPLATE_KEYS = (
-    (
-        "classify_instructions",
-        os.path.join("prompt_templates", "configurable_classify_instructions.txt"),
-    ),
-    (
-        "classify_output_template",
-        os.path.join("prompt_templates", "configurable_classify_output_template.txt"),
-    ),
-    (
-        "few_shot_examples",
-        os.path.join("prompt_templates", "configurable_few_shot_examples.txt"),
-    ),
+    ("classify_instructions", os.path.join("prompt_templates", "configurable_classify_instructions.txt")),
+    ("classify_output_template", os.path.join("prompt_templates", "configurable_classify_output_template.txt")),
+    ("few_shot_examples", os.path.join("prompt_templates", "configurable_few_shot_examples.txt")),
+    ("screening_template", os.path.join("prompt_templates", "configurable_screening_template.txt")),
 )
 
 
@@ -569,7 +569,34 @@ def validate_llm_output(llm_data, task_type):
     """
     if not isinstance(llm_data, dict):
         return False, "Output is not a dictionary"
-
+    # ---- screen ----
+    # Screening answers research_area, relevance, is_offtopic (in that order).
+    # Valid is_offtopic answers: true (flag, persisted) or null (leave alone).
+    # `false` is NOT valid (only a full classification may assert on-topic),
+    # nor is any unusable value.
+    if task_type == 'screen':
+        if 'is_offtopic' not in llm_data:
+            return False, "Missing required field: is_offtopic"
+        iso = llm_data.get('is_offtopic')
+        iso_verdict = _tri_state_verdict(iso)
+        if iso_verdict == 'unusable':
+            return False, f"Field 'is_offtopic' answered {iso!r}, which is neither true, false, nor null"
+        # true / false / null are all valid screening answers.
+        # Only 'true' is persisted; false and null are discarded by the state machine.
+        if iso_verdict == 'true':
+            if 'relevance' not in llm_data:
+                return False, "Missing required field: relevance (required when flagging off-topic)"
+            rel = llm_data.get('relevance')
+            if isinstance(rel, bool) or rel is None:
+                return False, "Field 'relevance' must be a number when flagging off-topic"
+            try:
+                rel_num = float(rel)
+            except (TypeError, ValueError):
+                return False, f"Field 'relevance' must be a number, got {rel!r}"
+            if rel_num > 3:
+                return False, f"Screening flagged is_offtopic=true with relevance {rel_num}; off-topic requires relevance <= 3"
+        return True, None
+    
     required = REQUIRED_VERIFIER_FIELDS if task_type == 'verify' else get_required_classification_fields()
     missing = [f for f in required if f not in llm_data]
     if missing:
@@ -625,7 +652,7 @@ def validate_llm_output(llm_data, task_type):
 
 def reload_domain_config():
     """Reloads the domain configuration from disk and updates all global references."""
-    global _domain_config, PROMPT_TEMPLATE, VERIFIER_TEMPLATE, RECLASSIFY_PROMPT_TEMPLATE, REQUIRED_CLASSIFICATION_FIELDS
+    global _domain_config, PROMPT_TEMPLATE, VERIFIER_TEMPLATE, RECLASSIFY_PROMPT_TEMPLATE,SCREENING_PROMPT_TEMPLATE, REQUIRED_CLASSIFICATION_FIELDS
     
     # 1. Reload from disk
     _domain_config = load_domain_config()
@@ -634,6 +661,7 @@ def reload_domain_config():
     PROMPT_TEMPLATE = _domain_config.get('PROMPT_TEMPLATE')
     VERIFIER_TEMPLATE = _domain_config.get('VERIFIER_TEMPLATE')
     RECLASSIFY_PROMPT_TEMPLATE = _domain_config.get('RECLASSIFY_PROMPT_TEMPLATE')
+    SCREENING_PROMPT_TEMPLATE = _domain_config.get('SCREENING_PROMPT_TEMPLATE')
     
     # 3. Recalculate required fields for validation
     REQUIRED_CLASSIFICATION_FIELDS = get_required_classification_fields()

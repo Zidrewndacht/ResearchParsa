@@ -152,3 +152,23 @@ def review_traces():
         return jsonify({'status': 'error', 'message': 'Queue manager returned non-JSON response'}), 502
 
     return jsonify(result), response.status_code
+
+@data_bp.route('/screen', methods=['POST'])
+def screen_papers():
+    data = request.get_json()
+    mode = data.get('mode', 'remaining')
+    try:
+        response = requests.post(
+            f"{config.QUEUE_MANAGER_URL}/screen",
+            json={'mode': mode},
+            timeout=None
+        )
+        if response.status_code == 200:
+            return jsonify({'status': 'started', 'message': f'Quick screening ({mode}) initiated.'})
+        # Surface the queue manager's error message (e.g. missing screening config)
+        try:
+            return jsonify({'status': 'error', 'message': response.json().get('error', 'Queue manager error')}), response.status_code
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'Queue manager returned error'}), 500
+    except requests.exceptions.RequestException:
+        return jsonify({'status': 'error', 'message': 'Queue manager unavailable'}), 503

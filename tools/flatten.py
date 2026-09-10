@@ -305,49 +305,54 @@ def main():
     # Predefined list of files to include in the flattened output
     # Updated to reflect the new folder structure (modules, web/static, web/templates, etc.)
     FILE_LIST = [
-        # # Root files
-        "browse_db.py",
-        "queue_manager.py",
+        #### #### # Root files
+        # "browse_db.py",
+        # "queue_manager.py",
+        # "config.yaml"
         # "README.md",
         # "LICENSE",
         
-        # # # Prompt templates
-        # "prompt_templates/classify_template.txt",
-        # "prompt_templates/reclassify_template.txt",
-        # "prompt_templates/verify_template.txt",
+        #### #### # Prompt templates
+        # "prompt_templates/base_templates/classify_base_template.txt",
+        # "prompt_templates/base_templates/reclassify_base_template.txt",
+        # "prompt_templates/base_templates/verify_base_template.txt",
+        # "prompt_templates/base_templates/trace_review_base_template.txt",
+        # "prompt_templates/configurable_classify_instructions.txt",
+        # "prompt_templates/configurable_classify_output_template.txt",
+        # "prompt_templates/configurable_few_shot_examples.txt",
         
-        # # # Queue manager module
-        "queue_manager/__init__.py",
+        #### #### # Queue manager module
+        # "queue_manager/__init__.py",
         "queue_manager/dispatcher.py",
         "queue_manager/logging_utils.py",
         "queue_manager/routes.py",
         "queue_manager/state.py",
 
-        # Meta module
-        "meta/agreement_core.py",
+        #### #### # Meta module
+        # "meta/agreement_core.py",
         # "meta/agreement_human_cli_v1.4.py",
-        "meta/agreement_3sets_cli_v1.4.py",
+        # "meta/agreement_3sets_cli_v1.4.py",
         # "meta/time_power_charts_v1.4.py",
         
-        # Shared module
+        #### #### # Shared module
         # "shared/__init__.py",
         "shared/config.py",
-        "shared/db.py",
+        # "shared/db.py",
         
-        # Web module
+        #### #### #Web module
         # "web/__init__.py",
         # "web/export_logic.py",
         # "web/filters.py",
         # "web/importer.py",
-        # "web/routes_data.py",
+        "web/routes_data.py",
         # "web/routes_files.py",
         # "web/routes_ui.py",
         # "web/routes_agreement.py",
-        # "web/LICENSE",
+        #### "web/LICENSE",
         
-        # Web static files
+        #Web static files
         # "web/static/js/agreement_report.js",
-        # "web/static/js/comms/comms_batch.js",
+        "web/static/js/comms/comms_batch.js",
         # "web/static/js/comms/comms_files.js",
         # "web/static/js/comms/comms_rendering.js",
         # "web/static/js/comms/comms_save.js",
@@ -367,16 +372,16 @@ def main():
         # "web/static/css/agreement_report.css",
         # "web/static/css/fonts.css",
         
-        # Web static pdfjs files (kept as previously specified)
+        #### #### #Web static pdfjs files (kept as previously specified)
         # "web/static/pdfjs/web/autosave.js",
         # "web/static/pdfjs/web/viewer.html",
         # "web/static/pdfjs/web/viewer_mods.css",
         
-        # Web templates
+        #### #### #Web templates
         # "web/templates/agreement_report.html",
         # "web/templates/detail_row.html",
         # "web/templates/history_row.html",
-        # "web/templates/index.html",
+        "web/templates/index.html",
         # "web/templates/papers_table.html",
         # # "web/templates/shared/about_modal_content.html",
         # "web/templates/shared/detail_form.html",

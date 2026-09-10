@@ -485,7 +485,7 @@ form label {
 .classify-btn {
     background: var(--classify-btn-color);
 }
-#classify-consensus-btn{
+#screen-remaining-btn, #classify-consensus-btn{
     width: 326px;
     background: linear-gradient(167deg, var(--classify-btn-color) 30%, var(--verify-btn-color)100%);
 }
@@ -1431,6 +1431,10 @@ li {
 
 .log-entry.log-type-user {
     background-color: #fafafa;
+}
+
+.log-entry.log-type-screener {
+    background-color: #fff8e1; /* Light yellow for triage */
 }
 
 .log-verification-summary {

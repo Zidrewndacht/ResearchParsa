@@ -338,4 +338,6 @@ OK      fix backup test side effect: backup_before_restore.parsa.tzst is inadver
 
         Fix regression: detail row animation missing *sometimes*?
 
-        Add a manual fast screening pass (to be used with a simpler model, prefer false positives)
+OK      Add a manual fast screening pass (to be used with a simpler model, prefer false positives)
+                This is NOT included in automated classify to consensus because it's meant for a separate model -- and orchestration of those is currently out-of-scope:
+                        ResearchParça simply assumes the model provided by the endpoint is the one to be used.

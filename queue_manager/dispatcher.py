@@ -13,8 +13,7 @@ from .logging_utils import (
     log_file_dispatch,
     log_file_error,
 )
-from .state import TASK_CLASSIFY, TASK_RECLASSIFY, TASK_VERIFY, log_queue_status, state
-
+from .state import TASK_CLASSIFY, TASK_RECLASSIFY, TASK_SCREEN, TASK_VERIFY, log_queue_status, state
 
 def _send_to_vllm_sync(task):
     """Synchronous vLLM call (runs in background thread)."""
@@ -34,7 +33,8 @@ def _send_to_vllm_sync(task):
             prompt,
             server_url_base=config.LLM_SERVER_URL,
             model_name=model_alias,
-            is_verification=(task_type == TASK_VERIFY)
+            is_verification=(task_type == TASK_VERIFY),
+            llm_params=task.get('llm_params')
         )
         
         success = content is not None
@@ -83,9 +83,15 @@ def can_admit_task(task_type):
         limit = config.MAX_CONCURRENT_WORKERS_VERIFY
     elif task_type == TASK_RECLASSIFY:
         limit = config.MAX_CONCURRENT_WORKERS_RECLASSIFY
+    elif task_type == TASK_SCREEN:
+        limit = config.MAX_CONCURRENT_WORKERS_SCREEN
     else:
         return False
-    
+
+    # Not configured -> don't admit (the /screen route guards this too).
+    if limit is None:
+        return False
+
     # Check if we're in homogeneous mode for this task type
     other_types_running = total - task_in_flight
     

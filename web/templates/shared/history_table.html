@@ -68,7 +68,7 @@
     </colgroup>
     <tbody>
       {% for entry in log_entries %}
-        {% if entry.type in ['classifier', 'consensus', 'averaged_llm', 'user'] and entry.valid %}
+        {% if entry.type in ['classifier', 'consensus', 'averaged_llm', 'user', 'screener'] and entry.valid %}
           {% set data = entry.output %}
           {% set changed = entry.changed_fields %}
           {% set cert = entry.certainty_map if show_certainty and entry.certainty_map else {} %}
@@ -106,16 +106,16 @@
             {% endfor %}
             <td class="secondary-text-cell changed-cell">{{ entry.timestamp|format_changed_timestamp }}</td>
             <td class="status-cell changed-by-cell">{{ entry.model|render_changed_by }}</td>
-            {% if entry.type == 'averaged_llm' %}
+              {% if entry.type in ['averaged_llm', 'screener'] %}
               <td class="status-cell certainty-{{ cert.get('verified', 'solid') }}{% if 'verified' in changed %} cell-changed{% endif %}">
-                {% if cert.get('verified') == 'conflict' %}<span class="conflict-warning">⚠️</span>
-                {% else %}<span class="emoji-content">{{ data.verified|default(None)|render_status }}</span>{% endif %}
+              {% if cert.get('verified') == 'conflict' %}<span class="conflict-warning">⚠️</span>
+              {% else %}<span class="emoji-content">{{ data.verified|default(None)|render_status }}</span>{% endif %}
               </td>
               <td class="secondary-text-cell number-cell{% if 'estimated_score' in changed %} cell-changed{% endif %}">
-                {% if data.estimated_score is not none %}{{ data.estimated_score }}{% endif %}
+              {% if data.estimated_score is not none %}{{ data.estimated_score }}{% endif %}
               </td>
               <td class="status-cell">{% if data.verified is not none %}🖥️{% else %}❔{% endif %}</td>
-            {% elif entry.type == 'user' %}
+              {% elif entry.type == 'user' %}
               <td class="status-cell{% if 'verified' in changed %} cell-changed{% endif %}">
                 <span class="emoji-content">{{ data.verified|default(None)|render_status }}</span>
               </td>

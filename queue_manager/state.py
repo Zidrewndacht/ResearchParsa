@@ -19,7 +19,10 @@ from .logging_utils import (
 TASK_CLASSIFY = "classify"
 TASK_VERIFY = "verify"
 TASK_RECLASSIFY = "reclassify"
+TASK_SCREEN = "screen"
 
+# Score stamped on screened-off-topic sets so recalculate_main_set derives verified=True.
+SCREENING_VERIFIED_SCORE = 10
 # ============================================================================
 # QUEUE STATE (Thread-Safe)
 # ============================================================================
@@ -27,7 +30,7 @@ class QueueState:
     def __init__(self):
         self.lock = threading.Lock()
         self.task_queue = deque()
-        self.in_flight = {TASK_CLASSIFY: 0, TASK_VERIFY: 0, TASK_RECLASSIFY: 0}
+        self.in_flight = {TASK_CLASSIFY: 0, TASK_VERIFY: 0, TASK_RECLASSIFY: 0, TASK_SCREEN: 0}
         self.completion_event = threading.Event()
         self.completion_event.set()  # Start set so dispatcher doesn't block on empty queue
         self.shutdown = False
@@ -71,24 +74,26 @@ class QueueState:
 state = QueueState()
 
 def log_queue_status():
-    """Log current queue and in-flight status."""
     total_in_flight = state.get_total_in_flight()
     classify_in_flight = state.get_in_flight(TASK_CLASSIFY)
     verify_in_flight = state.get_in_flight(TASK_VERIFY)
     reclassify_in_flight = state.get_in_flight(TASK_RECLASSIFY)
+    screen_in_flight = state.get_in_flight(TASK_SCREEN)
     queue_size = len(state.task_queue)
-    
+
     if classify_in_flight == total_in_flight and classify_in_flight > 0:
         mode = f"HOMOGENEOUS_CLASSIFY (limit={config.MAX_CONCURRENT_WORKERS_CLASSIFY})"
     elif verify_in_flight == total_in_flight and verify_in_flight > 0:
         mode = f"HOMOGENEOUS_VERIFY (limit={config.MAX_CONCURRENT_WORKERS_VERIFY})"
     elif reclassify_in_flight == total_in_flight and reclassify_in_flight > 0:
         mode = f"HOMOGENEOUS_RECLASSIFY (limit={config.MAX_CONCURRENT_WORKERS_RECLASSIFY})"
+    elif screen_in_flight == total_in_flight and screen_in_flight > 0:
+        mode = f"HOMOGENEOUS_SCREEN (limit={config.MAX_CONCURRENT_WORKERS_SCREEN})"
     else:
         mode = f"MIXED (min_threshold={config.MIN_CONCURRENT_WORKERS})"
 
-    log(f"{_color_prefix('QUEUE STATUS:', Colors.QUEUE_STATUS)} queue_size={queue_size} \t in_flight={total_in_flight} \t classify={classify_in_flight} \t verify={verify_in_flight} \t reclassify={reclassify_in_flight} \t mode={_color_queue_mode(mode)}")
-    log_file_queue_status(queue_size, total_in_flight, classify_in_flight, verify_in_flight, reclassify_in_flight, mode)
+    log(f"{_color_prefix('QUEUE STATUS:', Colors.QUEUE_STATUS)} queue_size={queue_size} \t in_flight={total_in_flight} \t classify={classify_in_flight} \t verify={verify_in_flight} \t reclassify={reclassify_in_flight} \t screen={screen_in_flight} \t mode={_color_queue_mode(mode)}")
+    log_file_queue_status(queue_size, total_in_flight, classify_in_flight, verify_in_flight, reclassify_in_flight, screen_in_flight, mode)
 
 # ============================================================================
 # STATE MACHINES
@@ -379,3 +384,101 @@ class ConsensusStateMachine:
             state.enqueue(next_task)
         elif self.completion_callback:
             self.completion_callback(self.paper_id, self.set_num, success)
+
+class ScreeningStateMachine:
+    """Quick off-topic triage for a SINGLE set of a single paper.
+
+    Outcome is binary by design:
+      - obviously off-topic  -> write a minimal self-verified off-topic blob
+      - anything else        -> leave the set untouched (still unclassified)
+
+    Rides its own TASK_SCREEN lane (much higher concurrency than full
+    classification, since these calls are tiny and thinking-disabled).
+    """
+    def __init__(self, paper_id, set_num, prompt_template, model_alias, llm_params):
+        self.paper_id = paper_id
+        self.set_num = set_num
+        self.prompt_template = prompt_template
+        self.model_alias = model_alias
+        self.llm_params = llm_params
+        self.completion_callback = None
+
+    def get_prompts(self):
+        paper = db.get_paper_by_id(self.paper_id)
+        if not paper:
+            return []
+        task = {
+            'task_type': TASK_SCREEN,
+            'task_id': f"{self.paper_id}_set{self.set_num}_screen",
+            'paper_id': self.paper_id,
+            'set_num': self.set_num,
+            'model_alias': self.model_alias,
+            'llm_params': self.llm_params,
+            'prompt': self.prompt_template.format(
+                title=paper.get('title', ''),
+                abstract=paper.get('abstract', ''),
+                keywords=paper.get('keywords', ''),
+                authors=paper.get('authors', ''),
+                year=paper.get('year', ''),
+                type=paper.get('type', ''),
+                journal=paper.get('journal', '')
+            ),
+            'state_machine': self
+        }
+        return [task]
+
+    def on_set_complete(self, set_num, success, llm_data, model_name, reasoning_trace, json_result):
+        if success and llm_data is not None:
+            is_valid, invalid_reason = config.validate_llm_output(llm_data, 'screen')
+            if is_valid:
+                if llm_data.get('is_offtopic') is True:
+                    # Thinking-disabled models produce an empty trace; substitute a
+                    # meaningful placeholder so the log entry isn't blank.
+                    # A real thinking trace passes through as-is.
+                    trace = reasoning_trace or "Screener ran and flagged the paper as off-topic in instruct mode (no thinking trace)"
+                    paper = db.get_paper_by_id(self.paper_id)
+                    raw = paper.get(f'set_{set_num}_llm') if paper else None
+                    already_classified = False
+                    if raw:
+                        try:
+                            already_classified = (json.loads(raw) or {}).get('is_offtopic') is not None
+                        except Exception:
+                            already_classified = False
+                    if not already_classified:
+                        screened = {
+                            'research_area': llm_data.get('research_area'),
+                            'is_offtopic': True,
+                            'relevance': llm_data.get('relevance'),
+                            'verified': True,
+                            'estimated_score': SCREENING_VERIFIED_SCORE,
+                        }
+                        db.update_set_cache(
+                            self.paper_id, set_num, screened, model_name,
+                            trace, json.dumps(screened), valid=True, log_type="screener"
+                        )
+                        db.recalculate_main_set(self.paper_id, changed_by=f"LLM_Screen_Set{set_num}")
+                else:
+                    # is_offtopic is false or null: valid "leave alone" answer.
+                    trace = reasoning_trace or "Screener ran in instruct mode (no thinking trace) and did not flag the paper as off-topic; left for full classification."
+                    db.update_set_log_only(
+                        self.paper_id, set_num, "screener", model_name,
+                        trace, json_result, valid=True
+                    )
+            else:
+                # Refused: log the invalid screening, leave the set untouched.
+                trace = reasoning_trace or f"Screener ran but returned an invalid answer; left for retry."
+                log(f"{_color_prefix('INVALID:', Colors.ERROR)} screen paper={self.paper_id} set={set_num} reason={invalid_reason}")
+                db.update_set_log_only(self.paper_id, set_num, "screener", model_name,
+                                       trace, json_result, valid=False,
+                                       invalid_reason=invalid_reason)
+        else:
+            # LLM call failed or returned non-JSON — also a refusal.
+            # The dispatcher already puts the error message in reasoning_trace,
+            # so this fallback only fires if that's somehow empty too.
+            trace = reasoning_trace or "Screening LLM call failed or returned non-JSON."
+            db.update_set_log_only(self.paper_id, set_num, "screener", model_name,
+                                   trace, json_result, valid=False,
+                                   invalid_reason="Screening LLM call failed or returned non-JSON")
+
+        if self.completion_callback:
+            self.completion_callback(self.paper_id, set_num, success)

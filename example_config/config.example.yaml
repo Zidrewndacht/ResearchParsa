@@ -9,7 +9,6 @@ default_year_from: 2021
 default_year_to: 2026
 default_min_page_count: 4
 
-
 # vLLM endpoint:
 llm_server_url: "http://localhost:8086"
 llm_api_key: null   #optional, unused for local vLLM instance.
@@ -19,11 +18,13 @@ llm_api_key: null   #optional, unused for local vLLM instance.
 # client.chat.completions.create(); `extra_body` is merged into the raw JSON
 # body for server-specific options the SDK doesn't know about.
 # Mirrors the official Qwen3.8 OpenAI-SDK example.
+
+#Qwen 3.8 27B in Thinking mode:
 llm_params:
   temperature: 1.0
   top_p: 0.95
   max_tokens: 81920
-  reasoning_effort: medium          # Qwen3.8: xhigh | medium | low
+  reasoning_effort: medium          # Qwen3.8: xhigh | medium | low, remove for Qwen3.6 or other.
   extra_body:
     top_k: 20
     min_p: 0
@@ -31,12 +32,26 @@ llm_params:
       enable_thinking: true
       preserve_thinking: true
 
+#Qwen 3.6 35-A3B in Instruct mode:
+screening_llm_params:
+  temperature: 0.7
+  top_p: 0.8
+  max_tokens: 8192
+  # reasoning_effort: medium          # Quick screening is intended for non-thinking models
+  extra_body:
+    top_k: 20
+    min_p: 0
+    chat_template_kwargs:
+      enable_thinking: false
+      preserve_thinking: false
+
 # Concurrency Limits - example values for 2x24GB on Qwen3.6 27B vLLM 0.26
 max_concurrent_workers_classify: 75
 max_concurrent_workers_verify: 80
 max_concurrent_workers_reclassify: 70
 min_concurrent_workers: 70
 
+max_concurrent_workers_screen: 100  
 
 # Consensus limits:
 max_consensus_iterations: 8

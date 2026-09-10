@@ -37,9 +37,12 @@ def log_file_error(context, error, task_id=None, paper_id=None, set_num=None):
 def log_file_request(endpoint, client, mode, paper_id=None):
     _log_to_file('requests.log', event='request', endpoint=endpoint, client=client, mode=mode, paper_id=paper_id)
 
-def log_file_queue_status(queue_size, total_in_flight, classify, verify, reclassify, mode):
-    _log_to_file('dispatcher.log', event='queue_status', queue_size=queue_size, in_flight_total=total_in_flight, in_flight_classify=classify, in_flight_verify=verify, in_flight_reclassify=reclassify, mode=mode)
-
+def log_file_queue_status(queue_size, total_in_flight, classify, verify, reclassify, screen, mode):
+    _log_to_file('dispatcher.log', event='queue_status', queue_size=queue_size,
+                 in_flight_total=total_in_flight, in_flight_classify=classify,
+                 in_flight_verify=verify, in_flight_reclassify=reclassify,
+                 in_flight_screen=screen, mode=mode)
+    
 # ============================================================================
 # COLOR CONSTANTS FOR LOGGING (black-background friendly - LIGHT COLORS ONLY)
 # ============================================================================
@@ -81,6 +84,8 @@ class Colors:
     # Timestamp - subtle but still readable: white at lower intensity
     TIMESTAMP = Fore.LIGHTBLACK_EX  # Or keep LIGHTBLACK_EX if your terminal renders it well
 
+    MODE_SCREEN = Fore.LIGHTYELLOW_EX
+    MODE_QUEUE_HOMOGENEOUS_SCREEN = Fore.LIGHTYELLOW_EX
 
 def _color_prefix(prefix: str, color: str) -> str:
     """Color only the prefix word (e.g., 'DISPATCH:') not the whole line."""
@@ -95,6 +100,8 @@ def _color_queue_mode(status_line: str) -> str:
         return f"{Colors.MODE_QUEUE_HOMOGENEOUS_VERIFY}HOMOGENEOUS_VERIFY{Style.RESET_ALL}" + status_line[len("HOMOGENEOUS_VERIFY"):]
     elif status_line.startswith("HOMOGENEOUS_RECLASSIFY"):
         return f"{Colors.MODE_QUEUE_HOMOGENEOUS_RECLASSIFY}HOMOGENEOUS_RECLASSIFY{Style.RESET_ALL}" + status_line[len("HOMOGENEOUS_RECLASSIFY"):]
+    elif status_line.startswith("HOMOGENEOUS_SCREEN"):
+        return f"{Colors.MODE_QUEUE_HOMOGENEOUS_SCREEN}HOMOGENEOUS_SCREEN{Style.RESET_ALL}" + status_line[len("HOMOGENEOUS_SCREEN"):]
     elif status_line.startswith("MIXED"):
         return f"{Colors.MODE_QUEUE_MIXED}MIXED{Style.RESET_ALL}" + status_line[len("MIXED"):]
     else:
@@ -107,6 +114,7 @@ def _color_mode(mode: str) -> str:
         'verify': Colors.MODE_VERIFY,
         'reclassify': Colors.MODE_RECLASSIFY,
         'consensus': Colors.MODE_CONSENSUS,
+        'screen': Colors.MODE_SCREEN,
         'id': Colors.MODE_ID,
         'all': Colors.MODE_ALL,
         'remaining': Colors.MODE_REMAINING,

@@ -238,7 +238,7 @@ prompts:
   classify_instructions: prompt_templates/configurable_classify_instructions.txt
   classify_output_template: prompt_templates/configurable_classify_output_template.txt
   few_shot_examples: prompt_templates/configurable_few_shot_examples.txt
-
+  screening_template: prompt_templates/configurable_screening_template.txt
 
 # ------------------------------------------------------------------------------
 # THEME / CSS OVERRIDES

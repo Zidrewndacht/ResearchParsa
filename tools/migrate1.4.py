@@ -259,12 +259,23 @@ def migrate_db(src_path, dst_path):
     dst_conn.commit()
     
     # Migrate auxiliary tables if they exist
-    src_cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name != 'papers'")
+    # Fetch both name and sql in one go to avoid extra queries and handle shadow tables safely
+    src_cur.execute("SELECT name, sql FROM sqlite_master WHERE type='table' AND name != 'papers'")
     other_tables = src_cur.fetchall()
-    for (table_name,) in other_tables:
+    
+    for table_name, create_sql in other_tables:
+        # Skip FTS5 virtual tables and their shadow tables (_data, _idx, _docsize, _config).
+        # FTS is currently unused in v1.4 (client-side search is used instead),
+        # and manually copying shadow tables breaks the virtual table creation.
+        if '_fts' in table_name:
+            print(f"⏭️  Skipping FTS table: {table_name}")
+            continue
+            
+        # Skip any internal SQLite tables that don't have a CREATE statement (sql is None)
+        if not create_sql:
+            continue
+
         print(f"📋 Copying auxiliary table: {table_name}")
-        src_cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        create_sql = src_cur.fetchone()[0]
         dst_cur.execute(create_sql)
         
         src_cur.execute(f"SELECT * FROM {table_name}")

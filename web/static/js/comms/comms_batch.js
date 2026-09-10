@@ -17,6 +17,7 @@ const parçaToolsBtn = document.getElementById('parça-tools-btn');
 const classifyAllBtn = document.getElementById('classify-all-btn');
 const classifyRemainingBtn = document.getElementById('classify-remaining-btn');
 const classifyConsensusBtn = document.getElementById('classify-consensus-btn');
+const screenRemainingBtn = document.getElementById('screen-remaining-btn');
 const verifyAllBtn = document.getElementById('verify-all-btn');
 const verifyRemainingBtn = document.getElementById('verify-remaining-btn');
 const batchStatusMessage = document.getElementById('batch-status-message');
@@ -48,6 +49,7 @@ function closeExporthModal() { exportModal.classList.remove('modal-active'); }
 // --- Batch Action Buttons ---
 // Define all batch buttons so they can be managed together
 const allBatchButtons = [
+    screenRemainingBtn,
     classifyAllBtn,
     classifyRemainingBtn,
     classifyConsensusBtn,
@@ -83,7 +85,9 @@ function runBatchAction(mode, actionType) {
 
     if (batchStatusMessage) batchStatusMessage.textContent = `Starting ${actionType} (${mode})...`;
 
-    const endpoint = actionType === 'classify' ? '/classify' : '/verify';
+    const endpoint = actionType === 'classify' ? '/classify'
+                   : actionType === 'verify'   ? '/verify'
+                   : '/screen';
 
     fetch(endpoint, {
         method: 'POST',
@@ -129,7 +133,8 @@ document.addEventListener('DOMContentLoaded', function () {
     classifyConsensusBtn.addEventListener('click', () => runBatchAction('consensus', 'classify'));
     verifyAllBtn.addEventListener('click', () => runBatchAction('all', 'verify'));
     verifyRemainingBtn.addEventListener('click', () => runBatchAction('remaining', 'verify'));
-
+    screenRemainingBtn.addEventListener('click', () => runBatchAction('remaining', 'screen'));
+    
     importActionsBtn.addEventListener('click', showImportActions);
     exportActionsBtn.addEventListener('click', showExportActions);
 });

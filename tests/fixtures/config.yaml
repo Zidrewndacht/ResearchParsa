@@ -7,6 +7,7 @@ llm_server_url: "http://localhost:8086"
 max_concurrent_workers_classify: 10
 max_concurrent_workers_verify: 10
 max_concurrent_workers_reclassify: 10
+max_concurrent_workers_screen: 10
 min_concurrent_workers: 10
 max_consensus_iterations: 3
 fresh_classify_fallback_iteration: 2

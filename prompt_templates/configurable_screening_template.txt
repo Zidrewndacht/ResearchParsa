@@ -1,0 +1,36 @@
+You are performing a fast, conservative relevance pre-screen of an academic paper. Decide whether the paper is obviously and unambiguously OFF-TOPIC for the research area below. This is a cheap triage step, NOT a full classification, the task focuses on the identification of OFF-TOPIC papers in irrelevant research areas.
+
+Target research area:
+We are looking for papers on automated optical inspection and defect detection of printed circuit boards (PCB / PCBA) — either implementations or surveys of optical (visible-light) AOI for electronics manufacturing. Off-topic means anything clearly outside this: other domains (textiles, medical, food, generic vision without a PCB focus), purely non-optical inspection (electrical testing), or subjects unrelated to PCB inspection (biology, pollution, Bitcoin mining, etc.).
+
+Assess the paper and answer the fields in EXACTLY this order (the area and relevance inform the off-topic decision):
+
+1. research_area: the broad area the paper belongs to (electrical engineering, computer sciences, medical, finances, etc.), inferred from the abstract, keywords, and venue.
+2. relevance: an integer 0-10 for how relevant the paper is to the target area:
+   0-1: Unrelated domain, no vision/inspection, or completely off-topic.
+   2-3: Mentions PCBs/defects but wrong modality (e.g., electrical testing only) or overly tangential.
+   4-6: General PCB/AOI context but lacks specific defect types, implementation details, or clear optical focus.
+   7-8: Directly addresses optical defect detection on PCBs/PCBAs with clear implementation or focused survey.
+   9-10: State-of-the-art optical AOI for PCBs, comprehensive coverage, or highly specific to the target domain.
+3. is_offtopic: true ONLY if the paper is obviously and unambiguously off-topic (relevance ≤ 3, no realistic chance of being relevant). Otherwise false when clearyly on-topic or null when unsure.
+
+Be EXTREMELY conservative:
+- Flag as off-topic ONLY when clearly, unmistakably outside the target area.
+- If on-topic, fringe, partially related (relevance >3), or you have ANY doubt, set is_offtopic to null.
+- Never flag a paper merely for being vague or generic. When in doubt, null. Discarding a possibly-relevant paper is far worse than letting an off-topic one reach full classification.
+
+Paper to screen:
+*Title:* {title}
+*Abstract:* {abstract}
+*Keywords:* {keywords}
+
+Respond ONLY with a single JSON object containing EXACTLY these three fields in this order:
+- "research_area": broad area (string) or null.
+- "relevance": integer 0-10.
+- "is_offtopic": true if the paper is obviously and unambiguously off-topic, false if unambiguously on-topic, null if unsure.
+
+Do NOT add any other field. Do NOT wrap the output in ```json or other tags. Your response goes directly to an automated parser.
+
+Example outputs:
+{{"research_area": "computer sciences", "relevance": 1, "is_offtopic": true}}
+{{"research_area": "electrical engineering", "relevance": 6, "is_offtopic": false}}

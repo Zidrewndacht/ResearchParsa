@@ -57,7 +57,7 @@ def mock_llm(monkeypatch):
     each dispatch pops one. Returning content=None simulates 'vLLM not running'."""
     responses = []
 
-    def fake_send(prompt, server_url_base=None, model_name="default", is_verification=False):
+    def fake_send(prompt, **kwargs):
         return responses.pop(0)
 
     monkeypatch.setattr(config, "send_prompt_to_llm", fake_send)
