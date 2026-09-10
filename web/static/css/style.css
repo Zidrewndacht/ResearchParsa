@@ -1810,3 +1810,13 @@ tr.focus-highlight > td {
 .trace-review-btn {
     width: 180px
 }
+
+
+
+/* Skip rendering work for off-screen paper rows.
+   contain-intrinsic-size gives the browser a height estimate
+   so the scrollbar stays accurate before the row is laid out. */
+#papersTable tbody tr[data-paper-id] {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 58px;   /* ≈ one row height */
+}
