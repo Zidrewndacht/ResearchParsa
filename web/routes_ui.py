@@ -14,51 +14,14 @@ ui_bp = Blueprint('ui', __name__)
 from shared.config import load_domain_config
 
 domain_config = load_domain_config()
-
-# web/routes_ui.py
-def render_papers_table(hide_offtopic_param=None, year_from_param=None, year_to_param=None, min_page_count_param=None):
-    hide_offtopic = True
-    if hide_offtopic_param is not None:
-        hide_offtopic = hide_offtopic_param.lower() in ['1', 'true', 'yes', 'on']
-        
-    year_from_value = int(year_from_param) if year_from_param is not None else config.DEFAULT_YEAR_FROM
-    year_to_value = int(year_to_param) if year_to_param is not None else config.DEFAULT_YEAR_TO
-    min_page_count_value = int(min_page_count_param) if min_page_count_param is not None else config.DEFAULT_MIN_PAGE_COUNT
-
-    papers = db.fetch_papers(
-        hide_offtopic=hide_offtopic,
-        year_from=year_from_value,
-        year_to=year_to_value,
-        min_page_count=min_page_count_value,
-    )
-    
-    rendered_table = render_template(
-        'papers_table.html',
-        papers=papers,
-        domain_config=domain_config,
-        type_emojis=config.TYPE_EMOJIS,
-        default_type_emoji=config.DEFAULT_TYPE_EMOJI,
-        pdf_emojis=config.PDF_EMOJIS,
-        hide_offtopic=hide_offtopic,
-        year_from_value=str(year_from_value),
-        year_to_value=str(year_to_value),
-        min_page_count_value=str(min_page_count_value),
-        search_query_value = request.args.get('search_query', '')
-    )
-    return rendered_table
-
 @ui_bp.route('/', methods=['GET'])
 def index():
-    # Self-heal if the database file exists but the 'papers' table is missing/corrupted
     try:
         with db.get_db() as conn:
             total_paper_count = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
     except sqlite3.OperationalError as e:
-        if "no such table: papers" or "unable to open database file" in str(e):
-            print("[Web] 'papers' table missing or corrupted. Rebuilding schema and reloading without filters...")
-            # Force rebuild the DB and placeholder row
+        if "no such table: papers" in str(e) or "unable to open database file" in str(e):
             db.init_db(config.DATABASE_FILE)
-            # Redirect to base '/' without query parameters so active filters don't hide the placeholder!
             return redirect(url_for('ui.index'))
         raise
 
@@ -67,62 +30,36 @@ def index():
     year_to_param = request.args.get('year_to')
     min_page_count_param = request.args.get('min_page_count')
 
-    # ---- Deep-link support (agreement report outlier links / bookmarks) ----
-    # Report links carry narrowly-scoped filters: the paper's year as the year
-    # range (fast render) and the paper ID as search_query (hides everything
-    # else). focus_paper.js then reveals the row, highlights it, and expands
-    # its history.
-    #
-    # For simple links such as /?focus_paper=<id>, resolve the paper year here
-    # so we do not load the whole table with year range 0-9999.
+    # Deep-link support (same logic as before)
     focus_paper = request.args.get('focus_paper', '').strip() or None
-    focus_year = None
-
     if focus_paper:
         try:
             focus_paper_row = db.get_paper_by_id(focus_paper)
             if focus_paper_row and focus_paper_row.get('year') is not None:
                 focus_year = int(focus_paper_row['year'])
+            else:
+                focus_year = None
         except (TypeError, ValueError):
             focus_year = None
-
         if hide_offtopic_param is None:
             hide_offtopic_param = '0'
-
         if focus_year is not None:
-            if year_from_param is None:
-                year_from_param = str(focus_year)
-
-            if year_to_param is None:
-                year_to_param = str(focus_year)
+            if year_from_param is None: year_from_param = str(focus_year)
+            if year_to_param is None: year_to_param = str(focus_year)
         else:
-            # Fallback only if the paper cannot be resolved or has no year.
-            if year_from_param is None:
-                year_from_param = '1800'
-
-            if year_to_param is None:
-                year_to_param = '2038'
-
+            if year_from_param is None: year_from_param = '1800'
+            if year_to_param is None: year_to_param = '2038'
         if min_page_count_param is None:
             min_page_count_param = '0'
-    # ----------------------------------------------------------------------
-    papers_table_content = render_papers_table(
-        hide_offtopic_param=hide_offtopic_param,
-        year_from_param=year_from_param,
-        year_to_param=year_to_param,
-        min_page_count_param=min_page_count_param,
-    )
-    
+
     try:
         year_from_input_value = str(int(year_from_param)) if year_from_param is not None else str(config.DEFAULT_YEAR_FROM)
     except ValueError:
         year_from_input_value = str(config.DEFAULT_YEAR_FROM)
-        
     try:
         year_to_input_value = str(int(year_to_param)) if year_to_param is not None else str(config.DEFAULT_YEAR_TO)
     except ValueError:
         year_to_input_value = str(config.DEFAULT_YEAR_TO)
-
     try:
         min_page_count_input_value = str(int(min_page_count_param)) if min_page_count_param is not None else str(config.DEFAULT_MIN_PAGE_COUNT)
     except ValueError:
@@ -133,22 +70,13 @@ def index():
     return render_template(
         'index.html',
         domain_config=domain_config,
-        papers_table_content=papers_table_content,
         hide_offtopic=hide_offtopic_checkbox_checked,
         year_from_value=year_from_input_value,
         year_to_value=year_to_input_value,
         min_page_count_value=min_page_count_input_value,
         total_paper_count=total_paper_count,
-        focus_paper=focus_paper
-    )
-
-@ui_bp.route('/load_table', methods=['GET'])
-def load_table():
-    return render_papers_table(
-        hide_offtopic_param=request.args.get('hide_offtopic'),
-        year_from_param=request.args.get('year_from'),
-        year_to_param=request.args.get('year_to'),
-        min_page_count_param=request.args.get('min_page_count'),
+        focus_paper=focus_paper,
+        search_query_value=request.args.get('search_query', '')
     )
 
 @ui_bp.route('/get_detail_row', methods=['GET'])

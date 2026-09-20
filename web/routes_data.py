@@ -11,6 +11,83 @@ from . import importer
 
 data_bp = Blueprint('data', __name__)
 
+@data_bp.route('/api/papers', methods=['GET'])
+def api_papers():
+    """Returns all papers matching server-side filters as JSON.
+    This is the single data endpoint consumed by the client-side renderer."""
+    hide_offtopic_param = request.args.get('hide_offtopic')
+    year_from_param = request.args.get('year_from')
+    year_to_param = request.args.get('year_to')
+    min_page_count_param = request.args.get('min_page_count')
+
+    hide_offtopic = True
+    if hide_offtopic_param is not None:
+        hide_offtopic = hide_offtopic_param.lower() in ['1', 'true', 'yes', 'on']
+    try:
+        year_from = int(year_from_param) if year_from_param is not None else None
+    except ValueError:
+        year_from = None
+    try:
+        year_to = int(year_to_param) if year_to_param is not None else None
+    except ValueError:
+        year_to = None
+    try:
+        min_page_count = int(min_page_count_param) if min_page_count_param is not None else None
+    except ValueError:
+        min_page_count = None
+
+    papers = db.fetch_papers(
+        hide_offtopic=hide_offtopic,
+        year_from=year_from,
+        year_to=year_to,
+        min_page_count=min_page_count,
+    )
+
+    # Strip heavy blobs not needed for table rendering / filtering / stats
+    slim_papers = []
+    for p in papers:
+        slim = {
+            'id': p.get('id'),
+            'type': p.get('type'),
+            'title': p.get('title'),
+            'authors': p.get('authors'),
+            'year': p.get('year'),
+            'journal': p.get('journal'),
+            'pages': p.get('pages'),
+            'page_count': p.get('page_count'),
+            'doi': p.get('doi'),
+            'issn': p.get('issn'),
+            'abstract': p.get('abstract'),
+            'keywords': p.get('keywords'),
+            'deannualized_conference': p.get('deannualized_conference'),
+            'user_trace': p.get('user_trace'),
+            'changed': p.get('changed'),
+            'changed_formatted': p.get('changed_formatted'),
+            'changed_by': p.get('changed_by'),
+            'verified': p.get('verified'),
+            'verified_by': p.get('verified_by'),
+            'estimated_score': p.get('estimated_score'),
+            'user_override_count': p.get('user_override_count'),
+            'pdf_filename': p.get('pdf_filename'),
+            'pdf_state': p.get('pdf_state'),
+            'classification': p.get('classification', {}),
+            'main_certainty': p.get('main_certainty', {}),
+        }
+        slim_papers.append(slim)
+
+    # Total count across ALL papers (unfiltered) for the footer
+    try:
+        with db.get_db() as conn:
+            total_paper_count = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
+    except Exception:
+        total_paper_count = len(slim_papers)
+
+    return jsonify({
+        'papers': slim_papers,
+        'total_paper_count': total_paper_count,
+        'loaded_count': len(slim_papers),
+    })
+
 @data_bp.route('/update_paper', methods=['POST'])
 def update_paper():
     """Endpoint to handle AJAX updates (partial or full)."""

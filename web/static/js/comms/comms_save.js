@@ -24,6 +24,23 @@ function sendAjaxRequest(cell, dataToSend, currentText, row, paperId, field) {
                 if (mainRow) {
                     // 1. Clear ghosts, apply certainty, update emojis, format relevance
                     applyCertaintyAndUpdates(mainRow, data);
+                    // In sendAjaxRequest, after data.status === 'success':
+                    // Add this line after applyCertaintyAndUpdates:
+                    papersStore.updatePaper(paperId, {
+                        classification: data.classification,
+                        main_certainty: data.main_certainty,
+                        changed: data.changed,
+                        changed_formatted: data.changed_formatted,
+                        changed_by: data.changed_by,
+                        verified: data.verified,
+                        verified_by: data.verified_by,
+                        estimated_score: data.estimated_score,
+                        user_override_count: data.user_override_count,
+                        page_count: data.page_count,
+                        user_trace: data.user_trace,
+                        pdf_state: data.pdf_state,
+                        pdf_filename: data.pdf_filename
+                    });
 
                     // 2. Update Audit / Universal Cells
                     if (data.changed_formatted !== undefined) mainRow.querySelector('.changed-cell').textContent = data.changed_formatted;
@@ -109,7 +126,22 @@ function saveChanges(paperId) {
                 if (row) {
                     // 1. Clear ghosts, apply certainty, update emojis, format relevance
                     applyCertaintyAndUpdates(row, data);
-
+                    
+                    papersStore.updatePaper(paperId, {
+                        classification: data.classification,
+                        main_certainty: data.main_certainty,
+                        changed: data.changed,
+                        changed_formatted: data.changed_formatted,
+                        changed_by: data.changed_by,
+                        verified: data.verified,
+                        verified_by: data.verified_by,
+                        estimated_score: data.estimated_score,
+                        user_override_count: data.user_override_count,
+                        page_count: data.page_count,
+                        user_trace: data.user_trace,
+                        pdf_state: data.pdf_state,
+                        pdf_filename: data.pdf_filename
+                    });
                     // 2. Update Audit / Universal Cells
                     if (data.changed_formatted !== undefined) row.querySelector('.changed-cell').textContent = data.changed_formatted;
                     if (data.changed_by !== undefined) row.querySelector('.changed-by-cell').innerHTML = renderChangedBy(data.changed_by);
@@ -336,7 +368,22 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (row) {
                             // 1. Clear ghosts, apply certainty, update emojis, format relevance
                             applyCertaintyAndUpdates(row, data);
-
+                            
+                            papersStore.updatePaper(paperId, {
+                                classification: data.classification,
+                                main_certainty: data.main_certainty,
+                                changed: data.changed,
+                                changed_formatted: data.changed_formatted,
+                                changed_by: data.changed_by,
+                                verified: data.verified,
+                                verified_by: data.verified_by,
+                                estimated_score: data.estimated_score,
+                                user_override_count: data.user_override_count,
+                                page_count: data.page_count,
+                                user_trace: data.user_trace,
+                                pdf_state: data.pdf_state,
+                                pdf_filename: data.pdf_filename
+                            });
                             // 2. Update Audit / Universal Cells
                             const userOverrideCountCell = row.querySelector('[data-field="user_override_count"]');
                             if (userOverrideCountCell) userOverrideCountCell.textContent = data.user_override_count ?? '0';

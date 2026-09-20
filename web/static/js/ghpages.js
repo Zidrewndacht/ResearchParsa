@@ -1,31 +1,25 @@
 // static/ghpages.js
-// Logic exclusive to the client-side-only standalone HTML/GHpages version
-const minPageCountInput = document.getElementById('min-page-count');
-const yearFromInput = document.getElementById('year-from');
-const yearToInput = document.getElementById('year-to');
-const allRows = document.querySelectorAll('#papersTable tbody tr[data-paper-id]');
-const totalPaperCount = allRows.length;
+/**
+ * Logic exclusive to the client-side-only standalone HTML/GHpages version.
+ * Provides toggleDetails and toggleHistory using the embedded data store
+ * and client-side renderers, since there is no server to fetch from.
+ */
 
 function toggleDetails(element) {
     const row = element.closest('tr');
     const detailRow = row.nextElementSibling && row.nextElementSibling.classList.contains('detail-row') ? row.nextElementSibling : null;
     const historyRow = row.nextElementSibling && row.nextElementSibling.nextElementSibling && row.nextElementSibling.nextElementSibling.classList.contains('history-row') ? row.nextElementSibling.nextElementSibling : null;
-    const isExpanded = detailRow && detailRow.classList.contains('expanded');
+    if (!detailRow) return;
+
+    const isExpanded = detailRow.classList.contains('expanded');
     const paperId = row.getAttribute('data-paper-id');
 
     if (isExpanded) {
-        if (detailRow) {
-            detailRow.classList.remove('expanded');
-            const detailContentContainer = detailRow.querySelector('.detail-flex-container');
-            if (detailContentContainer && detailContentContainer._clickableItemListener) {
-                detailContentContainer.removeEventListener('click', detailContentContainer._clickableItemListener);
-                detailContentContainer._clickableItemListener = null;
-            }
-        }
+        detailRow.classList.remove('expanded');
         element.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
         element.classList.remove('toggle-pressed');
-        openDetailIds.delete(paperId);
-        updateUrlWithDetailState();
+        if (typeof openDetailIds !== 'undefined') openDetailIds.delete(paperId);
+        if (typeof updateUrlWithDetailState === 'function') updateUrlWithDetailState();
     } else {
         if (historyRow && historyRow.classList.contains('expanded')) {
             historyRow.classList.remove('expanded');
@@ -34,33 +28,35 @@ function toggleDetails(element) {
                 historyToggleBtn.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
                 historyToggleBtn.classList.remove('toggle-pressed');
             }
-            openHistoryIds.delete(paperId);
+            if (typeof openHistoryIds !== 'undefined') openHistoryIds.delete(paperId);
         }
-        if (detailRow) {
-            detailRow.classList.add('expanded');
-            const detailContentContainer = detailRow.querySelector('.detail-flex-container');
-            if (detailContentContainer) {
-                if (detailContentContainer._clickableItemListener) {
-                    detailContentContainer.removeEventListener('click', detailContentContainer._clickableItemListener);
-                }
-                const clickableItemListener = function(event) {
+        if (typeof openDetailIds !== 'undefined') openDetailIds.add(paperId);
+        if (typeof updateUrlWithDetailState === 'function') updateUrlWithDetailState();
+
+        const contentPlaceholder = detailRow.querySelector('.detail-content-placeholder');
+        if (typeof papersStore !== 'undefined' && typeof exportRenderers !== 'undefined') {
+            const paper = papersStore.getPaperById(paperId);
+            if (paper) {
+                contentPlaceholder.innerHTML = exportRenderers.renderDetailContent(paper);
+                // Wire clickable items (keywords/authors)
+                contentPlaceholder.addEventListener('click', function (event) {
                     if (event.target.classList.contains('clickable-item')) {
                         event.preventDefault();
                         const searchTerm = event.target.getAttribute('data-search-term');
-                        if (searchTerm) {
+                        if (searchTerm && typeof searchInput !== 'undefined' && typeof applyLocalFilters === 'function') {
                             searchInput.value = searchTerm.trim();
                             applyLocalFilters();
                         }
                     }
-                };
-                detailContentContainer.addEventListener('click', clickableItemListener);
-                detailContentContainer._clickableItemListener = clickableItemListener;
+                });
+                requestAnimationFrame(() => {
+                    detailRow.offsetHeight; // Trigger reflow
+                    detailRow.classList.add('expanded');
+                });
+                element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
+                element.classList.add('toggle-pressed');
             }
         }
-        element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
-        element.classList.add('toggle-pressed');
-        openDetailIds.add(paperId);
-        updateUrlWithDetailState();
     }
 }
 
@@ -68,15 +64,17 @@ function toggleHistory(element) {
     const row = element.closest('tr');
     const historyRow = row.nextElementSibling && row.nextElementSibling.nextElementSibling && row.nextElementSibling.nextElementSibling.classList.contains('history-row') ? row.nextElementSibling.nextElementSibling : null;
     const detailRow = row.nextElementSibling && row.nextElementSibling.classList.contains('detail-row') ? row.nextElementSibling : null;
-    const isExpanded = historyRow && historyRow.classList.contains('expanded');
+    if (!historyRow) return;
+
+    const isExpanded = historyRow.classList.contains('expanded');
     const paperId = row.getAttribute('data-paper-id');
 
     if (isExpanded) {
-        if (historyRow) historyRow.classList.remove('expanded');
+        historyRow.classList.remove('expanded');
         element.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
         element.classList.remove('toggle-pressed');
-        openHistoryIds.delete(paperId);
-        updateUrlWithDetailState();
+        if (typeof openHistoryIds !== 'undefined') openHistoryIds.delete(paperId);
+        if (typeof updateUrlWithDetailState === 'function') updateUrlWithDetailState();
     } else {
         if (detailRow && detailRow.classList.contains('expanded')) {
             detailRow.classList.remove('expanded');
@@ -85,22 +83,50 @@ function toggleHistory(element) {
                 detailToggleBtn.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
                 detailToggleBtn.classList.remove('toggle-pressed');
             }
-            openDetailIds.delete(paperId);
+            if (typeof openDetailIds !== 'undefined') openDetailIds.delete(paperId);
         }
-        if (historyRow) historyRow.classList.add('expanded');
-        element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
-        element.classList.add('toggle-pressed');
-        openHistoryIds.add(paperId);
-        updateUrlWithDetailState();
+        if (typeof openHistoryIds !== 'undefined') openHistoryIds.add(paperId);
+        if (typeof updateUrlWithDetailState === 'function') updateUrlWithDetailState();
+
+        const contentPlaceholder = historyRow.querySelector('.detail-content-placeholder');
+        if (typeof papersStore !== 'undefined' && typeof exportRenderers !== 'undefined') {
+            const paper = papersStore.getPaperById(paperId);
+            if (paper) {
+                contentPlaceholder.innerHTML = exportRenderers.renderHistoryContent(paper);
+                requestAnimationFrame(() => {
+                    historyRow.offsetHeight; // Trigger reflow
+                    historyRow.classList.add('expanded');
+                });
+                element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
+                element.classList.add('toggle-pressed');
+            }
+        }
     }
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    hideOfftopicCheckbox.addEventListener('change', applyLocalFilters);
-    minPageCountInput.addEventListener('input', applyLocalFilters);
-    minPageCountInput.addEventListener('change', applyLocalFilters);
-    yearFromInput.addEventListener('input', applyLocalFilters);
-    yearFromInput.addEventListener('change', applyLocalFilters);
-    yearToInput.addEventListener('input', applyLocalFilters);
-    yearToInput.addEventListener('change', applyLocalFilters);
+    if (document.body.id !== 'html-export') return;
+
+    // In the static export, server-side filters act as local client-side filters
+    // because all data is already embedded and filtered in memory.
+    const hideOfftopicCheckbox = document.getElementById('hide-offtopic-checkbox');
+    const minPageCountInput = document.getElementById('min-page-count');
+    const yearFromInput = document.getElementById('year-from');
+    const yearToInput = document.getElementById('year-to');
+
+    if (hideOfftopicCheckbox && typeof applyLocalFilters === 'function') {
+        hideOfftopicCheckbox.addEventListener('change', applyLocalFilters);
+    }
+    if (minPageCountInput && typeof applyLocalFilters === 'function') {
+        minPageCountInput.addEventListener('input', applyLocalFilters);
+        minPageCountInput.addEventListener('change', applyLocalFilters);
+    }
+    if (yearFromInput && typeof applyLocalFilters === 'function') {
+        yearFromInput.addEventListener('input', applyLocalFilters);
+        yearFromInput.addEventListener('change', applyLocalFilters);
+    }
+    if (yearToInput && typeof applyLocalFilters === 'function') {
+        yearToInput.addEventListener('input', applyLocalFilters);
+        yearToInput.addEventListener('change', applyLocalFilters);
+    }
 });

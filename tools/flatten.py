@@ -323,10 +323,10 @@ def main():
         
         #### #### # Queue manager module
         # "queue_manager/__init__.py",
-        "queue_manager/dispatcher.py",
-        "queue_manager/logging_utils.py",
-        "queue_manager/routes.py",
-        "queue_manager/state.py",
+        # "queue_manager/dispatcher.py",
+        # "queue_manager/logging_utils.py",
+        # "queue_manager/routes.py",
+        # "queue_manager/state.py",
 
         #### #### # Meta module
         # "meta/agreement_core.py",
@@ -337,7 +337,7 @@ def main():
         #### #### # Shared module
         # "shared/__init__.py",
         "shared/config.py",
-        # "shared/db.py",
+        "shared/db.py",
         
         #### #### #Web module
         # "web/__init__.py",

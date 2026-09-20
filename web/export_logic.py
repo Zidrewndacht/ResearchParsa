@@ -117,38 +117,41 @@ def prepare_history_log_data(paper_dict, set_num=None):
         # no, there's no such a thing as "legacy data" to care about.
         entry['valid'] = bool(entry.get('valid', False))
 
+
     # PASS 1: Ascending order - Mark changed cells (valid entries only)
     # averaged_llm IS included here so changes between averaged states are highlighted.
     # screener IS included so its off-topic flag highlights the changed cells.
     table_entries = [e for e in log_entries
                      if e.get('type') in ['classifier', 'consensus', 'averaged_llm', 'user', 'screener']
                      and e.get('valid', False)]
-                     
     for i in range(len(table_entries)):
         current = table_entries[i]
         older = table_entries[i - 1] if i > 0 else None
-        current['changed_fields'] = set()
+        
+        # FIX: Use a temporary set for fast lookups, but store as a list
+        changed_set = set()
         if older:
             older_flat = _flatten_dict(older.get('output', {}) or {})
             current_flat = _flatten_dict(current.get('output', {}) or {})
-            
             all_keys = set(older_flat.keys()) | set(current_flat.keys())
             for key in all_keys:
                 if older_flat.get(key) != current_flat.get(key):
-                    current['changed_fields'].add(key)
+                    changed_set.add(key)
+        current['changed_fields'] = list(changed_set)  # <-- Store as list for JSON
 
     changed_fields_map = {
-        entry['timestamp']: entry.get('changed_fields', set())
+        entry['timestamp']: entry.get('changed_fields', [])  # <-- Default to empty list
         for entry in table_entries
     }
-
+    
     # PASS 2: Reverse for UI, attach verifiers
     log_entries.reverse()
     processed_entries = []
     cached_verifier = None
     for entry in log_entries:
         entry_type = entry.get('type', '')
-        entry['changed_fields'] = changed_fields_map.get(entry['timestamp'], set())
+        entry['changed_fields'] = changed_fields_map.get(entry['timestamp'], [])  # <-- Default to empty list
+        
         
         if entry_type == 'verifier':
             # Not sure if that was a real bug, fixed after integration/E2E testing
@@ -193,20 +196,18 @@ def generate_html_export_content(papers, hide_offtopic, year_from_value, year_to
     script_dir = os.path.dirname(os.path.abspath(__file__))
     static_dir = os.path.join(script_dir, 'static')
     fonts_parent_dir = os.path.join(script_dir, 'static/css')
-
     domain_config = config.load_domain_config()
-    
+
     def read_static(rel_path):
         path = os.path.join(static_dir, rel_path)
         if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f: return f.read()
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
         print(f"Warning: Static file not found: {rel_path}")
         return ""
 
     fonts_css_content = embed_fonts_in_css(fonts_parent_dir)
     style_css_content = read_static('css/style.css')
-
-    # Append the theme CSS directly to the bundled stylesheet
     style_css_content = fonts_css_content + "\n" + style_css_content + "\n" + domain_config.get('theme_css', '')
     style_css_content = rcssmin.cssmin(style_css_content)
 
@@ -215,57 +216,126 @@ def generate_html_export_content(papers, hide_offtopic, year_from_value, year_to
     d3_js_content = read_static('libs/d3.min.js')
     d3_cloud_js_content = read_static('libs/d3-cloud.min.js')
     pako_js_content = read_static('libs/pako.min.js')
-    
+
+    # --- Core modules (new architecture) ---
+    core_js = (
+        read_static('js/core/papers_store.js') + '\n' +
+        read_static('js/core/table_renderer.js') + '\n' +
+        read_static('js/core/virtual_scroll.js')
+    )
+    export_renderers_js = read_static('js/core/export_renderers.js')
+
+    # --- Stats modules ---
     stats_core_js = read_static('js/stats/stats_core.js')
     stats_generic_js = read_static('js/stats/stats_generic.js')
     stats_charts_js = read_static('js/stats/stats_charts.js')
     stats_domain_js = read_static('js/stats/stats_domain.js')
     stats_latex_js = read_static('js/stats/stats_latex.js')
-    
-    # AFTER
+
+    # --- Comms modules (needed for toggleDetails/toggleHistory in export) ---
+    comms_rendering_js = read_static('js/comms/comms_rendering.js')
+    comms_views_js = read_static('js/comms/comms_views.js')
+
+    # --- Filtering modules ---
     filtering_js = (
         read_static('js/filtering/filtering_state.js') + '\n' +
         read_static('js/filtering/filtering_engine.js') + '\n' +
         read_static('js/filtering/filtering_actions.js') + '\n' +
         read_static('js/filtering/filtering_init.js')
     )
+
     ghpages_js = read_static('js/ghpages.js') or read_static('ghpages.js')
 
-    # Minify JS
-    for var in ['chart_js_content', 'chart_js_datalabels_content', 'd3_js_content', 'd3_cloud_js_content', 
-                'stats_core_js', 'stats_generic_js', 'stats_charts_js', 'stats_domain_js', 'stats_latex_js',
-                'filtering_js', 'ghpages_js']:
+    # Minify all JS
+    for var in ['chart_js_content', 'chart_js_datalabels_content', 'd3_js_content',
+                'd3_cloud_js_content', 'stats_core_js', 'stats_generic_js',
+                'stats_charts_js', 'stats_domain_js', 'stats_latex_js',
+                'core_js', 'export_renderers_js', 'comms_rendering_js',
+                'comms_views_js', 'filtering_js', 'ghpages_js']:
         locals()[var] = rjsmin.jsmin(locals()[var])
 
-    papers_table_static_export = render_template(
-        'static_export/papers_table_static_export.html', papers=papers, domain_config=domain_config,
-        type_emojis=config.TYPE_EMOJIS, pdf_emojis=config.PDF_EMOJIS, default_type_emoji=config.DEFAULT_TYPE_EMOJI,
-        hide_offtopic=hide_offtopic, year_from_value=str(year_from_value), year_to_value=str(year_to_value),
-        min_page_count_value=str(min_page_count_value), is_lite_export=is_lite_export,
-        skip_abstracts=skip_abstracts, 
-    )
-    
+    # Build slim papers JSON for embedding
+    slim_papers = []
+    for p in papers:
+        slim = {
+            'id': p.get('id'),
+            'type': p.get('type'),
+            'title': p.get('title'),
+            'authors': p.get('authors'),
+            'year': p.get('year'),
+            'journal': p.get('journal'),
+            'pages': p.get('pages'),
+            'page_count': p.get('page_count'),
+            'doi': p.get('doi'),
+            'issn': p.get('issn'),
+            'abstract': p.get('abstract') if not skip_abstracts else None,
+            'keywords': p.get('keywords'),
+            'deannualized_conference': p.get('deannualized_conference'),
+            'user_trace': p.get('user_trace'),
+            'changed': p.get('changed'),
+            'changed_formatted': p.get('changed_formatted'),
+            'changed_by': p.get('changed_by'),
+            'verified': p.get('verified'),
+            'verified_by': p.get('verified_by'),
+            'estimated_score': p.get('estimated_score'),
+            'user_override_count': p.get('user_override_count'),
+            'pdf_filename': p.get('pdf_filename'),
+            'pdf_state': p.get('pdf_state'),
+            'classification': p.get('classification', {}),
+            'main_certainty': p.get('main_certainty', {}),
+        }
+        # Embed history log entries for client-side rendering
+        if not is_lite_export:
+            slim['llm_log_entries'] = p.get('llm_log_entries', [])
+            slim['set_1_llm_log_entries'] = p.get('set_1_llm_log_entries', [])
+            slim['set_2_llm_log_entries'] = p.get('set_2_llm_log_entries', [])
+            slim['set_3_llm_log_entries'] = p.get('set_3_llm_log_entries', [])
+        else:
+            for key in ['llm_log_entries', 'set_1_llm_log_entries',
+                        'set_2_llm_log_entries', 'set_3_llm_log_entries']:
+                entries = p.get(key, [])
+                for entry in entries:
+                    entry['trace'] = ''
+                slim[key] = entries
+        slim_papers.append(slim)
+
+    papers_json = json.dumps(slim_papers, ensure_ascii=False, separators=(',', ':'))
+
     full_html_content = render_template(
-        'static_export/index_static_export.html', domain_config=domain_config,
-        papers_table_static_export=papers_table_static_export, hide_offtopic=hide_offtopic,
-        year_from_value=year_from_value, year_to_value=year_to_value, min_page_count_value=min_page_count_value,
-        # total_paper_count=len(papers),
-        style_css_content=Markup(style_css_content), chart_js_content=Markup(chart_js_content),
-        chart_js_datalabels_content=Markup(chart_js_datalabels_content), d3_js_content=Markup(d3_js_content),
-        d3_cloud_js_content=Markup(d3_cloud_js_content), stats_core_js=Markup(stats_core_js),
-        stats_generic_js=Markup(stats_generic_js), stats_charts_js=Markup(stats_charts_js),
-        stats_domain_js=Markup(stats_domain_js), stats_latex_js=Markup(stats_latex_js),
-        filtering_js=Markup(filtering_js), ghpages_js=Markup(ghpages_js)
+        'static_export/index_static_export.html',
+        domain_config=domain_config,
+        hide_offtopic=hide_offtopic,
+        year_from_value=year_from_value,
+        year_to_value=year_to_value,
+        min_page_count_value=min_page_count_value,
+        total_paper_count=len(papers),
+        papers_json=papers_json,
+        style_css_content=Markup(style_css_content),
+        chart_js_content=Markup(chart_js_content),
+        chart_js_datalabels_content=Markup(chart_js_datalabels_content),
+        d3_js_content=Markup(d3_js_content),
+        d3_cloud_js_content=Markup(d3_cloud_js_content),
+        core_js=Markup(core_js),
+        export_renderers_js=Markup(export_renderers_js),
+        comms_rendering_js=Markup(comms_rendering_js),
+        comms_views_js=Markup(comms_views_js),
+        stats_core_js=Markup(stats_core_js),
+        stats_generic_js=Markup(stats_generic_js),
+        stats_charts_js=Markup(stats_charts_js),
+        stats_domain_js=Markup(stats_domain_js),
+        stats_latex_js=Markup(stats_latex_js),
+        filtering_js=Markup(filtering_js),
+        ghpages_js=Markup(ghpages_js),
     )
-    
-    # --- Compress the full HTML content ---
+
     html_bytes = full_html_content.encode('utf-8')
     compressed_bytes = gzip.compress(html_bytes)
     compressed_base64 = base64.b64encode(compressed_bytes).decode('ascii')
-    
-    # --- Render the LOADER template, passing the compressed data ---
+
     loader_html_content = render_template(
-        'static_export/loader.html', compressed_html_data=compressed_base64, pako_js_content=Markup(pako_js_content)
+        'static_export/loader.html',
+        compressed_html_data=compressed_base64,
+        pako_js_content=Markup(pako_js_content)
     )
     return loader_html_content
 

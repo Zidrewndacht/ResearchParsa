@@ -2,10 +2,7 @@
 /**
  * Server reads & navigation: row expansion (detail/history),
  * server-side filtering, and keyboard shortcuts for filters.
- * Depends on: filtering.js (applyLocalFilters, openDetailIds, openHistoryIds,
- *             updateUrlWithDetailState, searchInput, hideOfftopicCheckbox)
  */
-
 // --- DOM Element References (Server Filters) ---
 const minPageCountInput = document.getElementById('min-page-count');
 const yearFromInput = document.getElementById('year-from');
@@ -32,12 +29,11 @@ function toggleHistory(element) {
         row.nextElementSibling.nextElementSibling : null;
     const detailRow = row.nextElementSibling && row.nextElementSibling.classList.contains('detail-row') ?
         row.nextElementSibling : null;
-
+    if (!historyRow) return;
     const isHistoryExpanded = historyRow.classList.contains('expanded');
     const paperId = row.getAttribute('data-paper-id');
 
     if (isHistoryExpanded) {
-        // Hiding the history row
         historyRow.classList.remove('expanded');
         element.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
         element.classList.remove('toggle-pressed');  // Remove pressed state from THIS button
@@ -58,26 +54,31 @@ function toggleHistory(element) {
         updateUrlWithDetailState();
 
         const contentPlaceholder = historyRow.querySelector('.detail-content-placeholder');
-        fetch(`/get_history_row?paper_id=${encodeURIComponent(paperId)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success' && data.html) {
-                    contentPlaceholder.innerHTML = data.html;
-                    requestAnimationFrame(() => {
-                        historyRow.offsetHeight;
-                        historyRow.classList.add('expanded');
-                    });
-                    element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
-                    element.classList.add('toggle-pressed');
-                } else {
-                    console.error(`Error loading history row for paper ${paperId}:`, data.message);
-                    contentPlaceholder.innerHTML = `<p>Error loading history: ${data.message || 'Unknown error'}</p>`;
-                }
-            })
-            .catch(error => {
-                console.error(`Error fetching history row for paper ${paperId}:`, error);
-                contentPlaceholder.innerHTML = `<p>Error loading history: ${error.message}</p>`;
-            });
+
+        if (document.body.id === 'html-export') {
+            // Render from embedded data
+            const paper = papersStore.getPaperById(paperId);
+            if (paper && typeof exportRenderers !== 'undefined') {
+                contentPlaceholder.innerHTML = exportRenderers.renderHistoryContent(paper);
+                requestAnimationFrame(() => { historyRow.offsetHeight; historyRow.classList.add('expanded'); });
+                element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
+                element.classList.add('toggle-pressed');
+            }
+        } else {
+            fetch(`/get_history_row?paper_id=${encodeURIComponent(paperId)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success' && data.html) {
+                        contentPlaceholder.innerHTML = data.html;
+                        requestAnimationFrame(() => { historyRow.offsetHeight; historyRow.classList.add('expanded'); });
+                        element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
+                        element.classList.add('toggle-pressed');
+                    } else {
+                        contentPlaceholder.innerHTML = `<p>Error loading history: ${data.message || 'Unknown error'}</p>`;
+                    }
+                })
+                .catch(error => { contentPlaceholder.innerHTML = `<p>Error loading history: ${error.message}</p>`; });
+        }
     }
 }
 
@@ -123,104 +124,75 @@ function toggleDetails(element) {
         updateUrlWithDetailState(); // Update URL immediately
 
         const contentPlaceholder = detailRow.querySelector('.detail-content-placeholder');
-        fetch(`/get_detail_row?paper_id=${encodeURIComponent(paperId)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success' && data.html) {
-                    contentPlaceholder.innerHTML = data.html;
 
-                    // --- Event Delegation for Clickable Items (Authors/Keywords) ---
-                    const detailContainer = contentPlaceholder; // Use the placeholder as the container
-                    detailContainer.addEventListener('click', function (event) {
-                        if (event.target.classList.contains('clickable-item')) {
-                            event.preventDefault();
-                            const searchTerm = event.target.getAttribute('data-search-term');
-                            if (searchTerm) {
-                                searchInput.value = searchTerm.trim();
-                                applyLocalFilters();
-                            }
-                        }
-                    });
-                    // --- End Event Delegation Setup ---
-
-                    requestAnimationFrame(() => {
-                        detailRow.offsetHeight; // Trigger reflow
-                        detailRow.classList.add('expanded');
-                    });
-                    element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
-                    element.classList.add('toggle-pressed');  // Add pressed state
-                } else {
-                    console.error(`Error loading detail row for paper ${paperId}:`, data.message);
-                    if (contentPlaceholder) {
+        if (document.body.id === 'html-export') {
+            const paper = papersStore.getPaperById(paperId);
+            if (paper && typeof exportRenderers !== 'undefined') {
+                contentPlaceholder.innerHTML = exportRenderers.renderDetailContent(paper);
+                _wireClickableItems(contentPlaceholder);
+                requestAnimationFrame(() => { detailRow.offsetHeight; detailRow.classList.add('expanded'); });
+                element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
+                element.classList.add('toggle-pressed');
+            }
+        } else {
+            fetch(`/get_detail_row?paper_id=${encodeURIComponent(paperId)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success' && data.html) {
+                        contentPlaceholder.innerHTML = data.html;
+                        _wireClickableItems(contentPlaceholder);
+                        requestAnimationFrame(() => { detailRow.offsetHeight; detailRow.classList.add('expanded'); });
+                        element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
+                        element.classList.add('toggle-pressed');
+                    } else {
                         contentPlaceholder.innerHTML = `<p>Error loading details: ${data.message || 'Unknown error'}</p>`;
                     }
-                }
-            })
-            .catch(error => {
-                console.error(`Error fetching detail row for paper ${paperId}:`, error);
-                if (contentPlaceholder) {
-                    contentPlaceholder.innerHTML = `<p>Error loading details: ${error.message}</p>`;
-                }
-            });
+                })
+                .catch(error => { contentPlaceholder.innerHTML = `<p>Error loading details: ${error.message}</p>`; });
+        }
     }
 }
 
-function applyServerSideFilters() {     //moved from filtering as it has server-based
+function _wireClickableItems(container) {
+    container.addEventListener('click', function (event) {
+        if (event.target.classList.contains('clickable-item')) {
+            event.preventDefault();
+            const searchTerm = event.target.getAttribute('data-search-term');
+            if (searchTerm) {
+                searchInput.value = searchTerm.trim();
+                applyLocalFilters();
+            }
+        }
+    });
+}
+
+function applyServerSideFilters() {
     document.documentElement.classList.add('busyCursor');
     const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('hide_offtopic', hideOfftopicCheckbox.checked ? '1' : '0');
+    const yf = document.getElementById('year-from').value.trim();
+    if (yf !== '' && !isNaN(parseInt(yf))) urlParams.set('year_from', yf); else urlParams.delete('year_from');
+    const yt = document.getElementById('year-to').value.trim();
+    if (yt !== '' && !isNaN(parseInt(yt))) urlParams.set('year_to', yt); else urlParams.delete('year_to');
+    const mpc = document.getElementById('min-page-count').value.trim();
+    if (mpc !== '' && !isNaN(parseInt(mpc))) urlParams.set('min_page_count', mpc); else urlParams.delete('min_page_count');
 
-    const isOfftopicChecked = hideOfftopicCheckbox.checked;
-    urlParams.set('hide_offtopic', isOfftopicChecked ? '1' : '0');
+    const fetchUrl = `/api/papers?${urlParams.toString()}`;
+    fetch(fetchUrl)
+        .then(r => r.json())
+        .then(data => {
+            papersStore.load(data.papers);
+            const totalEl = document.getElementById('total-papers-count');
+            if (totalEl) totalEl.textContent = data.total_paper_count;
+            const loadedEl = document.getElementById('loaded-papers-count');
+            if (loadedEl) loadedEl.textContent = data.loaded_count;
 
-    const yearFromValue = document.getElementById('year-from').value.trim();
-    if (yearFromValue !== '' && !isNaN(parseInt(yearFromValue))) {
-        urlParams.set('year_from', yearFromValue);
-    } else {
-        urlParams.delete('year_from');
-    }
-
-    const yearToValue = document.getElementById('year-to').value.trim();
-    if (yearToValue !== '' && !isNaN(parseInt(yearToValue))) {
-        urlParams.set('year_to', yearToValue);
-    } else {
-        urlParams.delete('year_to');
-    }
-
-    const minPageCountValue = document.getElementById('min-page-count').value.trim();
-    if (minPageCountValue !== '' && !isNaN(parseInt(minPageCountValue))) {
-        urlParams.set('min_page_count', minPageCountValue);
-    } else {
-        urlParams.delete('min_page_count');
-    }
-
-    // const searchValue = document.getElementById('search-input').value.trim();
-    // if (searchValue !== '') {
-    //     urlParams.set('search_query', searchValue);
-    // } else {
-    //     urlParams.delete('search_query');
-    // }
-
-    // Construct the URL for the /load_table endpoint with current parameters
-    const loadTableUrl = `/load_table?${urlParams.toString()}`;
-
-    fetch(loadTableUrl)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.text();
-        })
-        .then(html => {
-            const tbody = document.querySelector('#papersTable tbody');
-            if (tbody) {
-                tbody.innerHTML = html;
-                const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
-                window.history.replaceState({ path: newUrl }, '', newUrl);
-                applyLocalFilters(); //update local filters and let it remove busy state
-            }
+            const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+            window.history.replaceState({ path: newUrl }, '', newUrl);
+            applyLocalFilters(); //update local filters and let it remove busy state
         })
         .catch(error => {
-            console.error('Error fetching updated table:', error);
+            console.error('Error fetching papers:', error);
             document.documentElement.classList.remove('busyCursor');
         });
 }
@@ -229,20 +201,14 @@ function applyServerSideFilters() {     //moved from filtering as it has server-
 // DOMContentLoaded — Views / Filters wiring
 // ============================================================================
 document.addEventListener('DOMContentLoaded', function () {
+    if (document.body.id === 'html-export') return; // No server filters in export
     yearFromInput.addEventListener('change', showApplyButton);
     yearToInput.addEventListener('change', showApplyButton);
     minPageCountInput.addEventListener('change', showApplyButton);
     hideOfftopicCheckbox.addEventListener('change', applyServerSideFilters);
     applyButton.addEventListener('click', applyServerSideFilters);
-
     // --- Enter Key Handlers for Server-Side Filters ---
-    if (yearFromInput) {
-        yearFromInput.addEventListener('keydown', handleEnterKey);
-    }
-    if (yearToInput) {
-        yearToInput.addEventListener('keydown', handleEnterKey);
-    }
-    if (minPageCountInput) {
-        minPageCountInput.addEventListener('keydown', handleEnterKey);
-    }
+    if (yearFromInput) yearFromInput.addEventListener('keydown', handleEnterKey);
+    if (yearToInput) yearToInput.addEventListener('keydown', handleEnterKey);
+    if (minPageCountInput) minPageCountInput.addEventListener('keydown', handleEnterKey);
 });

@@ -25,6 +25,11 @@
     <script>
         window.FOCUS_PAPER_ID = {{ focus_paper | tojson }};
     </script>
+    
+    <script src="{{ url_for('static', filename='js/core/papers_store.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/core/table_renderer.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/core/virtual_scroll.js') }}" defer></script>
+
     <script src="{{ url_for('static', filename='js/stats/stats_core.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/stats/stats_generic.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/stats/stats_charts.js') }}" defer></script>
@@ -157,7 +162,7 @@
 
                 <th class="ontop-header" colspan="9" rowspan="2" >
                     <div class="search-container">
-                        <input type="search" id="search-input" placeholder="(F3) Type to search all fields..." value="{{ search_query_value }}">
+                        <input type="search" id="search-input" placeholder="(F3) Type to search all fields..." value="">
                         <button type="button" id="clear-search-btn" class="clear-btn" title="Clear search">&times;</button>
                     </div>
                 </th>
@@ -246,8 +251,18 @@
             </tr>
         </thead>
 
-            {#<!-- tbody and tfoot come from the papers_table template-->#}
-            {{ papers_table_content | safe }}        
+            <tbody>
+                <tr>
+                    <td style="padding:0;" colspan="{{ total_cols }}">
+                        <div class="loading-overlay">
+                            <div class="header-branding"><span>Research</span><span style="font-weight: 600; color: var(--primary-ui-color);">Parsa</span></div>
+                            <div class="loading-spinner"></div>
+                            <div>Reprocessing table. Wait patiently. </div>
+                        </div>
+                    </td>
+                    <td style="display:none" colspan="5"></td>
+                </tr>
+            </tbody>   
             
             {% include 'shared/papers_table_tfoot.html' %}
             {#<!-- Use the rendered table content passed from the server -->#} 

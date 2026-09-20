@@ -1,75 +1,49 @@
-/**
- * Generic domain-agnostic statistics logic.
- */
-
+// static/js/stats/stats_generic.js
 registerStatsHook('collectData', collectGenericStatsData);
 registerStatsHook('renderCharts', renderGenericStats);
 
-function collectGenericStatsData(visibleRows) {
-    buildStatsLists(visibleRows);
-}
+function collectGenericStatsData(papers) { buildStatsLists(papers); }
 
-function buildStatsLists(visibleRows) {
+function buildStatsLists(papers) {
     const stats = { journals: {}, conferences: {}, keywords: {}, authors: {}, researchAreas: {}, slot1: {}, slot2: {} };
-    
     const statsListFields = APP_CONFIG.editable_fields.filter(f => f.stats_list).slice(0, 2);
     const slot1Field = statsListFields[0];
     const slot2Field = statsListFields[1];
 
-    visibleRows.forEach(row => {
-        const journalCell = row.cells[COL_IDX_JOURNAL];
-        const typeCell = row.cells[COL_IDX_TYPE];
-        
-        const journalConfName = journalCell.textContent.trim();
-        const typeValue = (typeCell.getAttribute('title') || typeCell.textContent.trim()).toLowerCase();
-        if (journalConfName) {
+    for (const paper of papers) {
+        const journalName = paper.deannualized_conference || paper.journal || '';
+        const typeValue = (paper.type || '').toLowerCase();
+        if (journalName) {
             const mappedType = mapPubType(typeValue);
-            if (mappedType === 'Journal') stats.journals[journalConfName] = (stats.journals[journalConfName] || 0) + 1;
-            else if (mappedType === 'Conference') stats.conferences[journalConfName] = (stats.conferences[journalConfName] || 0) + 1;
+            if (mappedType === 'Journal') stats.journals[journalName] = (stats.journals[journalName] || 0) + 1;
+            else if (mappedType === 'Conference') stats.conferences[journalName] = (stats.conferences[journalName] || 0) + 1;
         }
-
-        const keywordsCell = row.querySelector('td.hidden-data-cell[data-field="keywords"]');
-        if (keywordsCell && keywordsCell.textContent.trim()) {
-            keywordsCell.textContent.trim().split(';').map(kw => kw.trim()).filter(kw => kw.length > 0).forEach(keyword => {
+        if (paper.keywords) {
+            paper.keywords.split(';').map(kw => kw.trim()).filter(kw => kw.length > 0).forEach(keyword => {
                 stats.keywords[keyword] = (stats.keywords[keyword] || 0) + 1;
             });
         }
-
-        const authorsCell = row.querySelector('td.hidden-data-cell[data-field="authors"]');
-        if (authorsCell && authorsCell.textContent.trim()) {
-            authorsCell.textContent.trim().split(';').map(a => a.trim()).filter(a => a.length > 0).forEach(author => {
+        if (paper.authors) {
+            paper.authors.split(';').map(a => a.trim()).filter(a => a.length > 0).forEach(author => {
                 stats.authors[author] = (stats.authors[author] || 0) + 1;
             });
         }
-
+        const c = paper.classification || {};
         APP_CONFIG.editable_fields.forEach(field => {
             if (field.json_path === 'research_area') {
-                const cell = row.querySelector(`td.hidden-data-cell[data-field="${field.json_path.replace(/\./g, '_')}"]`);
-                if (cell && cell.textContent.trim()) {
-                    stats.researchAreas[cell.textContent.trim()] = (stats.researchAreas[cell.textContent.trim()] || 0) + 1;
-                }
+                const val = tableRenderer.getPath(c, field.json_path);
+                if (val) stats.researchAreas[String(val).trim()] = (stats.researchAreas[String(val).trim()] || 0) + 1;
             }
         });
-
         if (slot1Field) {
-            const cell = row.querySelector(`td.hidden-data-cell[data-field="${slot1Field.json_path.replace(/\./g, '_')}"]`);
-            if (cell && cell.textContent.trim()) {
-                cell.textContent.trim().split(/[,;]/).map(m => m.trim()).filter(m => m.length > 0).forEach(val => {
-                    stats.slot1[val] = (stats.slot1[val] || 0) + 1;
-                });
-            }
+            const val = tableRenderer.getPath(c, slot1Field.json_path);
+            if (val) String(val).split(/[,;]/).map(m => m.trim()).filter(m => m.length > 0).forEach(v => { stats.slot1[v] = (stats.slot1[v] || 0) + 1; });
         }
-
         if (slot2Field) {
-            const cell = row.querySelector(`td.hidden-data-cell[data-field="${slot2Field.json_path.replace(/\./g, '_')}"]`);
-            if (cell && cell.textContent.trim()) {
-                cell.textContent.trim().split(/[,;]/).map(m => m.trim()).filter(m => m.length > 0 && m.toLowerCase() !== 'none' && m.toLowerCase() !== 'n/a').forEach(val => {
-                    stats.slot2[val] = (stats.slot2[val] || 0) + 1;
-                });
-            }
+            const val = tableRenderer.getPath(c, slot2Field.json_path);
+            if (val) String(val).split(/[,;]/).map(m => m.trim()).filter(m => m.length > 0 && m.toLowerCase() !== 'none' && m.toLowerCase() !== 'n/a').forEach(v => { stats.slot2[v] = (stats.slot2[v] || 0) + 1; });
         }
-    });
-
+    }
     populateList('journalStatsList', stats.journals);
     populateList('conferenceStatsList', stats.conferences);
     populateList('keywordStatsList', stats.keywords);
@@ -77,7 +51,6 @@ function buildStatsLists(visibleRows) {
     populateList('researchAreaStatsList', stats.researchAreas);
     populateSimpleList('slot1StatsList', stats.slot1);
     populateSimpleList('slot2StatsList', stats.slot2);
-
     if (document.getElementById('cloudToggle').checked) toggleCloud();
 }
 
@@ -131,7 +104,6 @@ function buildKeywordCloud() {
         if (!nameEl || !countEl) return null;
         return { text: nameEl.textContent.trim(), size: +countEl.textContent };
     }).filter(Boolean);
-
     if (!raw.length) {
         const prevSvg = document.querySelector('#keywordCloudCanvas svg');
         if (prevSvg) prevSvg.remove();
@@ -140,18 +112,14 @@ function buildKeywordCloud() {
     const topK = raw.slice(0, 50);
     const width = document.querySelector('#keywordCloudCanvas').clientWidth || 500;
     const height = 280;
-    
     if (typeof d3 === 'undefined' || !d3.layout || !d3.layout.cloud) return;
-
     const sizeScale = d3.scaleLinear().domain([topK[topK.length - 1].size, topK[0].size]).range([9 , 54]);
     const layout = d3.layout.cloud().size([width, height]).words(topK.map(d => ({ ...d, size: sizeScale(d.size) })))
         .padding(1).rotate(() => 0).font('sans-serif').fontSize(d => d.size).on('end', draw);
     layout.start();
-
     function draw(words) {
         d3.select('#keywordCloudCanvas').select('svg').remove();
         const svg = d3.select('#keywordCloudCanvas').append('svg').attr('width', width).attr('height', height);
-        
         const colors = [    'hsla(347, 70%, 39%, 0.75)', 'hsla(204, 82%, 28%, 0.75)',  'hsla(42, 100%, 28%, 0.75)',
                             'hsla(180, 48%, 28%, 0.75)', 'hsla(260, 100%, 40%, 0.75)', 'hsla(30, 100%, 33%, 0.75)',
                             'hsla(0, 0%, 38%, 0.75)',    'hsla(147, 48%, 38%, 0.75)'];
@@ -178,10 +146,7 @@ function toggleCloud() {
 function prepareSurveyVsImplDistData(totalVisiblePaperCount) {
     const surveyCount = latestCounts['is_survey'] || 0;
     const implCount = totalVisiblePaperCount - surveyCount;
-    return {
-        labels: ['Survey', 'Primary'],
-        datasets: [{ label: 'Survey vs Primary Distribution', data: [surveyCount, implCount], backgroundColor: ['hsla(204, 42%, 67%, 0.95)', 'hsla(53, 50%, 69%, 0.95)'], borderColor: "#333", borderWidth: 1, hoverOffset: 4 }]
-    };
+    return { labels: ['Survey', 'Primary'], datasets: [{ label: 'Survey vs Primary Distribution', data: [surveyCount, implCount], backgroundColor: ['hsla(204, 42%, 67%, 0.95)', 'hsla(53, 50%, 69%, 0.95)'], borderColor: "#333", borderWidth: 1, hoverOffset: 4 }] };
 }
 
 function preparePubTypesDistData() {
@@ -201,7 +166,7 @@ function prepareScopeData(totalVisiblePaperCount, totalAllPaperCount) {
     let ontopicCount = 0, offtopicCount = 0;
     if (document.body.id === 'html-export') {
         ontopicCount = totalVisiblePaperCount;
-        offtopicCount = Math.max(0, document.querySelectorAll('#papersTable tbody tr[data-paper-id]').length - totalVisiblePaperCount);
+        offtopicCount = Math.max(0, papersStore.getAllCount() - totalVisiblePaperCount);
     } else {
         ontopicCount = totalVisiblePaperCount;
         offtopicCount = Math.max(0, totalAllPaperCount - totalVisiblePaperCount);
@@ -209,39 +174,37 @@ function prepareScopeData(totalVisiblePaperCount, totalAllPaperCount) {
     return { labels: ['On-topic', 'Off-topic'], datasets: [{ label: 'Dataset Scope', data: [ontopicCount, offtopicCount], backgroundColor: ['hsla(96, 66%, 49%, 0.95)', 'hsla(347, 60%, 69%, 0.95)'], borderColor: "#333", borderWidth: 1, hoverOffset: 4 }] };
 }
 
-function prepareRelevanceHistogramData(visibleRows) {
+function prepareRelevanceHistogramData(papers) {
     const relevanceCounts = Array(11).fill(0);
-    visibleRows.forEach(row => {
-        const relevanceCell = row.querySelector('[data-field="relevance"]');
-        const relevanceScore = parseInt(relevanceCell.textContent.trim(), 10);
-        if (!isNaN(relevanceScore) && relevanceScore >= 0 && relevanceScore <= 10) relevanceCounts[relevanceScore]++;
-    });
+    for (const paper of papers) {
+        const val = tableRenderer.getPath(paper.classification || {}, 'relevance');
+        const score = parseInt(val, 10);
+        if (!isNaN(score) && score >= 0 && score <= 10) relevanceCounts[score]++;
+    }
     return { labels: Array.from({ length: 11 }, (_, i) => i.toString()), datasets: [{ label: 'Relevance Histogram', data: relevanceCounts, backgroundColor: 'hsla(204, 62%, 57%, 0.95)', borderColor: 'hsla(204, 82%, 28%, 0.75)', borderWidth: 1 }] };
 }
 
-function prepareEstScoreHistogramData(visibleRows) {
+function prepareEstScoreHistogramData(papers) {
     const estScoreCounts = Array(11).fill(0);
-    visibleRows.forEach(row => {
-        const estScoreCell = row.querySelector('[data-field="estimated_score"]');
-        const estScore = parseInt(estScoreCell.textContent.trim(), 10);
+    for (const paper of papers) {
+        const val = tableRenderer.getPath(paper.classification || {}, 'estimated_score');
+        const estScore = parseInt(val, 10);
         if (!isNaN(estScore) && estScore >= 0 && estScore <= 10) estScoreCounts[estScore]++;
-    });
+    }
     return { labels: Array.from({ length: 11 }, (_, i) => i.toString()), datasets: [{ label: 'Estimated Score Histogram', data: estScoreCounts, backgroundColor: 'hsla(52, 80%, 47%, 0.95)', borderColor: 'hsla(42, 100%, 28%, 0.75)', borderWidth: 1 }] };
 }
 
-function calculateJournalConferenceStats(visibleRows) {
+function calculateJournalConferenceStats(papers) {
     const journalCounts = {}, conferenceCounts = {};
-    visibleRows.forEach(row => {
-        const journalCell = row.cells[COL_IDX_JOURNAL];
-        const typeCell = row.cells[COL_IDX_TYPE];
-        const journalName = journalCell.textContent.trim();
-        const type = (typeCell.getAttribute('title') || typeCell.textContent.trim()).toLowerCase();
+    for (const paper of papers) {
+        const journalName = paper.deannualized_conference || paper.journal || '';
+        const type = (paper.type || '').toLowerCase();
         if (journalName) {
             const mappedType = mapPubType(type);
             if (mappedType === 'Journal') journalCounts[journalName] = (journalCounts[journalName] || 0) + 1;
             else if (mappedType === 'Conference') conferenceCounts[journalName] = (conferenceCounts[journalName] || 0) + 1;
         }
-    });
+    }
     return {
         journals: Object.entries(journalCounts).filter(([n, c]) => c >= 1).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count })),
         conferences: Object.entries(conferenceCounts).filter(([n, c]) => c >= 1).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }))
@@ -251,9 +214,8 @@ function calculateJournalConferenceStats(visibleRows) {
 function populateMetricsTableDirectly(journals, conferences) {
     const tableElement = document.getElementById('metricsTableStatsList');
     tableElement.innerHTML = '';
-    const totalVisiblePaperCount = document.querySelectorAll('#papersTable tbody tr[data-paper-id]:not(.filter-hidden)').length;
+    const totalVisiblePaperCount = papersStore.getFilteredCount();
     const distinctAuthorsCount = document.getElementById('authorStatsList').querySelectorAll('li').length;
-    
     const createRow = (labelHtml, value) => {
         const row = document.createElement('tr');
         const labelCell = document.createElement('td'); labelCell.innerHTML = labelHtml; labelCell.className = 'metric-label';
@@ -288,7 +250,6 @@ function prepareLineChartData() {
         if (isCumulative) data = calculateCumulativeData(data);
         return { label: type, data: data, borderColor: `hsl(${hue}, 40%, 40%)`, backgroundColor: `hsla(${hue}, 30%, 65%, 0.85)`, fill: isStacked, tension: 0.25 };
     });
-    
     return {
         surveyImpl: { labels: yearsForSurveyImpl, datasets: surveyVsImplDatasets },
         pubTypes: { labels: yearsForPubTypes, datasets: pubTypeLineDatasets }
@@ -297,77 +258,34 @@ function prepareLineChartData() {
 
 function renderGenericLineCharts() {
     const lineData = prepareLineChartData();
-    
     destroyChartInstance('surveyVsImplLineChart');
-    registerChartInstance('surveyVsImplLineChart', renderGenericLineChart(
-        document.getElementById('surveyVsImplLineChart').getContext('2d'), 
-        lineData.surveyImpl, 
-        'Survey vs Primary Papers per Year'
-    ));
-
+    registerChartInstance('surveyVsImplLineChart', renderGenericLineChart(document.getElementById('surveyVsImplLineChart').getContext('2d'), lineData.surveyImpl, 'Survey vs Primary Papers per Year'));
     destroyChartInstance('pubTypesPerYearLineChart');
-    registerChartInstance('pubTypesPerYearLineChart', renderGenericLineChart(
-        document.getElementById('pubTypesPerYearLineChart').getContext('2d'), 
-        lineData.pubTypes, 
-        'Publication Types per Year'
-    ));
+    registerChartInstance('pubTypesPerYearLineChart', renderGenericLineChart(document.getElementById('pubTypesPerYearLineChart').getContext('2d'), lineData.pubTypes, 'Publication Types per Year'));
 }
 
 function renderGenericStats() {
-    const visibleRows = document.querySelectorAll('#papersTable tbody tr[data-paper-id]:not(.filter-hidden)');
-    const totalVisiblePaperCount = visibleRows.length;
-    
+    const papers = papersStore.getFiltered();
+    const totalVisiblePaperCount = papers.length;
     let totalAllPaperCount;
     if (document.body.id === 'html-export') {
-        // In a static export, the "total" is simply all the rows that were exported into the file
-        totalAllPaperCount = document.querySelectorAll('#papersTable tbody tr[data-paper-id]').length;
+        totalAllPaperCount = papersStore.getAllCount();
     } else {
-        // In the live app, read from the server-rendered footer
         const totalPaperCountCell = document.getElementById('total-papers-count');
         totalAllPaperCount = totalPaperCountCell ? parseInt(totalPaperCountCell.textContent.trim(), 10) : 0;
     }
-    
     destroyChartInstance('surveyVsImplDistChart');
-    registerChartInstance('surveyVsImplDistChart', renderBarOrPieChart(
-        document.getElementById('surveyVsImplPieChart').getContext('2d'), 
-        prepareSurveyVsImplDistData(totalVisiblePaperCount), 
-        'Survey vs Primary', 
-        showPieCharts ? 'pie' : 'bar'
-    ));
-    
+    registerChartInstance('surveyVsImplDistChart', renderBarOrPieChart(document.getElementById('surveyVsImplPieChart').getContext('2d'), prepareSurveyVsImplDistData(totalVisiblePaperCount), 'Survey vs Primary', showPieCharts ? 'pie' : 'bar'));
     destroyChartInstance('pubTypesDistChart');
-    registerChartInstance('pubTypesDistChart', renderBarOrPieChart(
-        document.getElementById('publTypePieChart').getContext('2d'), 
-        preparePubTypesDistData(), 
-        'Pub Types', 
-        showPieCharts ? 'pie' : 'bar'
-    ));
-    
+    registerChartInstance('pubTypesDistChart', renderBarOrPieChart(document.getElementById('publTypePieChart').getContext('2d'), preparePubTypesDistData(), 'Pub Types', showPieCharts ? 'pie' : 'bar'));
     destroyChartInstance('scopeDistChart');
-    registerChartInstance('scopeDistChart', renderBarOrPieChart(
-        document.getElementById('OffTopicPieChart').getContext('2d'), 
-        prepareScopeData(totalVisiblePaperCount, totalAllPaperCount), 
-        'Scope', 
-        showPieCharts ? 'pie' : 'bar'
-    ));
-
+    registerChartInstance('scopeDistChart', renderBarOrPieChart(document.getElementById('OffTopicPieChart').getContext('2d'), prepareScopeData(totalVisiblePaperCount, totalAllPaperCount), 'Scope', showPieCharts ? 'pie' : 'bar'));
     destroyChartInstance('relevanceHistogram');
-    registerChartInstance('relevanceHistogram', renderHistogram(
-        document.getElementById('RelevanceHistogram').getContext('2d'), 
-        prepareRelevanceHistogramData(visibleRows), 
-        'Relevance Histogram'
-    ));
-    
+    registerChartInstance('relevanceHistogram', renderHistogram(document.getElementById('RelevanceHistogram').getContext('2d'), prepareRelevanceHistogramData(papers), 'Relevance Histogram'));
     destroyChartInstance('estScoreHistogram');
-    registerChartInstance('estScoreHistogram', renderHistogram(
-        document.getElementById('estScoreHistogram').getContext('2d'), 
-        prepareEstScoreHistogramData(visibleRows), 
-        'Estimated Score Histogram'
-    ));
-    
+    registerChartInstance('estScoreHistogram', renderHistogram(document.getElementById('estScoreHistogram').getContext('2d'), prepareEstScoreHistogramData(papers), 'Estimated Score Histogram'));
     renderGenericLineCharts();
-
-    const { journals, conferences } = calculateJournalConferenceStats(visibleRows);
+    const { journals, conferences } = calculateJournalConferenceStats(papers);
     populateMetricsTableDirectly(journals, conferences);
 }
 

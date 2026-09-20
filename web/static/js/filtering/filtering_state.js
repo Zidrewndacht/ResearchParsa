@@ -53,7 +53,6 @@ const VERIFIED_BY_SORT_WEIGHTS = {
 // Cache frequently accessed elements
 const tbody = document.querySelector('#papersTable tbody');
 const duplicateCountElement = document.getElementById('duplicate-papers-count');
-const rowCache = new WeakMap();
 
 // Helper to safely traverse nested JSON paths
 function getJsonPath(obj, path) {

@@ -1,3 +1,4 @@
+// static/js/stats/stats_domain.js
 /**
  * Domain-specific statistics logic (PCB AOI).
  */
@@ -42,7 +43,6 @@ const FIELD_LABELS = {
     'technique.dl_cnn_detector': 'CNN Detector', 'technique.dl_rcnn_detector': 'R-CNN Detector', 'technique.dl_transformer': 'Transformer',
     'technique.dl_other': 'Other DL', 'technique.hybrid': 'Hybrid', 'technique.available_dataset': 'Datasets'
 };
-
 const TECHNIQUE_FIELDS = [
     'technique.classic_cv_based', 'technique.ml_traditional', 'technique.dl_cnn_classifier', 'technique.dl_cnn_detector', 
     'technique.dl_rcnn_detector', 'technique.dl_transformer', 'technique.dl_other', 'technique.hybrid'
@@ -51,7 +51,6 @@ const TECHNIQUE_FIELD_COLOR_MAP = {
     'technique.classic_cv_based': 0, 'technique.ml_traditional': 1, 'technique.dl_cnn_classifier': 2, 'technique.dl_cnn_detector': 3,
     'technique.dl_rcnn_detector': 4, 'technique.dl_transformer': 5, 'technique.dl_other': 6, 'technique.hybrid': 7
 };
-
 const FEATURE_FIELDS = [
     'features.tracks', 'features.holes', 'features.bare_pcb_other',
     'features.solder_insufficient', 'features.solder_excess', 'features.solder_void', 'features.solder_crack', 'features.solder_other',
@@ -64,7 +63,6 @@ const FEATURE_FIELD_INDEX_MAP = {
     'features.orientation': 8, 'features.missing_component': 9, 'features.wrong_component': 10, 'features.component_other': 11,
     'features.cosmetic': 12, 'features.other': 13
 };
-
 const featureColorGroups = {
     0: { label: 'Bare PCB Defects', fields: ['features.tracks', 'features.holes', 'features.bare_pcb_other'] },
     3: { label: 'Solder Defects', fields: ['features.solder_insufficient', 'features.solder_excess', 'features.solder_void', 'features.solder_crack', 'features.solder_other'] },
@@ -74,47 +72,36 @@ const featureColorGroups = {
 };
 
 // --- Data Collection Hook ---
-function collectDomainYearlyData(visibleRows) {
+function collectDomainYearlyData(papers) {
     const yearlyTechniques = {};
     const yearlyFeatures = {};
-    
-    visibleRows.forEach(row => {
-        const yearCell = row.cells[COL_IDX_YEAR]; 
-        const yearText = yearCell ? yearCell.textContent.trim() : '';
-        const year = yearText ? parseInt(yearText, 10) : null;
-        
-        if (year && !isNaN(year)) {
-            if (!yearlyTechniques[year]) {
-                yearlyTechniques[year] = {};
-                TECHNIQUE_FIELDS.forEach(f => yearlyTechniques[year][f] = 0);
-            }
-            if (!yearlyFeatures[year]) {
-                yearlyFeatures[year] = {};
-                FEATURE_FIELDS.forEach(f => yearlyFeatures[year][f] = 0);
-            }
-            
-            TECHNIQUE_FIELDS.forEach(field => {
-                const techCell = row.querySelector(`[data-field="${field}"]`);
-                if (techCell && techCell.textContent.trim() === '✔️') yearlyTechniques[year][field]++;
-            });
-            
-            FEATURE_FIELDS.forEach(field => {
-                const featCell = row.querySelector(`[data-field="${field}"]`);
-                if (featCell && featCell.textContent.trim() === '✔️') yearlyFeatures[year][field]++;
-            });
+    for (const paper of papers) {
+        const year = paper.year;
+        if (!year || isNaN(year)) continue;
+        const c = paper.classification || {};
+        if (!yearlyTechniques[year]) {
+            yearlyTechniques[year] = {};
+            TECHNIQUE_FIELDS.forEach(f => yearlyTechniques[year][f] = 0);
         }
-    });
-    
+        if (!yearlyFeatures[year]) {
+            yearlyFeatures[year] = {};
+            FEATURE_FIELDS.forEach(f => yearlyFeatures[year][f] = 0);
+        }
+        TECHNIQUE_FIELDS.forEach(field => {
+            if (tableRenderer.getBool(c, field) === true) yearlyTechniques[year][field]++;
+        });
+        FEATURE_FIELDS.forEach(field => {
+            if (tableRenderer.getBool(c, field) === true) yearlyFeatures[year][field]++;
+        });
+    }
     latestYearlyData.techniques = yearlyTechniques;
     latestYearlyData.features = yearlyFeatures;
 }
 
-// --- Chart Data Preparation ---
 function prepareFeaturesData() {
     const featureGroupToggle = document.getElementById('featureGroupToggle');
     const isGrouped = featureGroupToggle && featureGroupToggle.checked;
     const counts = latestCounts;
-
     if (showPieCharts) {
         let labels = [], values = [], backgroundColors = [];
         if (isGrouped) {
@@ -192,62 +179,42 @@ function prepareSMTvsTHTData() {
     return {
         labels: ['SMT', 'THT'],
         datasets: [{
-            label: 'SMT vs THT Distribution',
-            data: [smtCount, thtCount],
+            label: 'SMT vs THT Distribution', data: [smtCount, thtCount],
             backgroundColor: ['hsla(180, 32%, 52%, 0.95)', 'hsla(260, 60%, 66%, 0.95)'],
             borderColor: "#333", borderWidth: 1, hoverOffset: 4
         }]
     };
 }
 
-// --- Chart Rendering ---
 function renderDomainLineCharts() {
-    // 1. Techniques per Year
     const techniquesYearlyData = latestYearlyData.techniques || {};
     const yearsForTechniques = Object.keys(techniquesYearlyData).map(Number).sort((a, b) => a - b);
-    
     const techniqueLineDatasets = TECHNIQUE_FIELDS.map(field => {
         const label = FIELD_LABELS[field] || field;
         let data = yearsForTechniques.map(year => techniquesYearlyData[year]?.[field] || 0);
         if (isCumulative) data = calculateCumulativeData(data);
-        
         const originalIndex = TECHNIQUE_FIELD_COLOR_MAP[field] !== undefined ? TECHNIQUE_FIELD_COLOR_MAP[field] : -1;
         const borderColor = (originalIndex !== -1 && techniquesBorderColors[originalIndex]) ? techniquesBorderColors[originalIndex] : 'rgba(0, 0, 0, 1)';
         const backgroundColor = (originalIndex !== -1 && techniquesColors[originalIndex]) ? techniquesColors[originalIndex] : 'rgba(0, 0, 0, 0.1)';
-        
         return { label, data, borderColor, backgroundColor, fill: isStacked, tension: 0.25 };
     });
-
     const techniquesPerYearCtx = document.getElementById('techniquesPerYearLineChart').getContext('2d');
     destroyChartInstance('techniquesPerYearLineChart');
     if (techniqueLineDatasets.length > 0) {
         registerChartInstance('techniquesPerYearLineChart', new Chart(techniquesPerYearCtx, {
-            type: 'line',
-            data: { labels: yearsForTechniques, datasets: techniqueLineDatasets },
+            type: 'line', data: { labels: yearsForTechniques, datasets: techniqueLineDatasets },
             options: {
                 responsive: true, maintainAspectRatio: false, devicePixelRatio: getChartDPR(),
-                plugins: {
-                    legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', generateLabels: cumulativeLegendLabels } },
-                    title: { display: false, text: 'Techniques per Year' },
-                    tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${context.raw}` } }
-                },
-                scales: {
-                    y: { beginAtZero: true, ticks: { precision: 0 }, stacked: isStacked },
-                    x: { ticks: { precision: 0 }, stacked: isStacked }
-                }
+                plugins: { legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', generateLabels: cumulativeLegendLabels } }, title: { display: false, text: 'Techniques per Year' }, tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${context.raw}` } } },
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 }, stacked: isStacked }, x: { ticks: { precision: 0 }, stacked: isStacked } }
             }
         }));
     } else {
-        registerChartInstance('techniquesPerYearLineChart', new Chart(techniquesPerYearCtx, {
-            type: 'line', data: { labels: [], datasets: [] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Techniques per Year (No Data)' } } }
-        }));
+        registerChartInstance('techniquesPerYearLineChart', new Chart(techniquesPerYearCtx, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Techniques per Year (No Data)' } } } }));
     }
 
-    // 2. Features per Year
     const featuresYearlyData = latestYearlyData.features || {};
     const yearsForFeatures = Object.keys(featuresYearlyData).map(Number).sort((a, b) => a - b);
-    
     const aggregatedFeatureDataByColor = {};
     Object.keys(featureColorGroups).forEach(baseColorIndex => {
         const group = featureColorGroups[baseColorIndex];
@@ -255,84 +222,46 @@ function renderDomainLineCharts() {
             return group.fields.reduce((sum, field) => sum + (featuresYearlyData[year]?.[field] || 0), 0);
         });
     });
-    
     const aggregatedFeatureDataByColorFinal = {};
     Object.keys(aggregatedFeatureDataByColor).forEach(label => {
         let data = aggregatedFeatureDataByColor[label];
         if (isCumulative) data = calculateCumulativeData(data);
         aggregatedFeatureDataByColorFinal[label] = data;
     });
-
     const featureLineDatasets = Object.keys(featureColorGroups).map(baseColorIndex => {
         const group = featureColorGroups[baseColorIndex];
         const colorIndex = parseInt(baseColorIndex);
         const borderColor = featuresBorderColorsOriginalOrder[colorIndex] || 'rgba(0,0,0,1)';
         const backgroundColor = featuresColorsOriginalOrder[colorIndex] || 'rgba(0,0,0,0.1)';
-        
-        return {
-            label: group.label, data: aggregatedFeatureDataByColorFinal[group.label],
-            borderColor, backgroundColor, fill: isStacked, tension: 0.25
-        };
+        return { label: group.label, data: aggregatedFeatureDataByColorFinal[group.label], borderColor, backgroundColor, fill: isStacked, tension: 0.25 };
     });
-
     const featuresPerYearCtx = document.getElementById('featuresPerYearLineChart').getContext('2d');
     destroyChartInstance('featuresPerYearLineChart');
     if (featureLineDatasets.length > 0) {
         registerChartInstance('featuresPerYearLineChart', new Chart(featuresPerYearCtx, {
-            type: 'line',
-            data: { labels: yearsForFeatures, datasets: featureLineDatasets },
+            type: 'line', data: { labels: yearsForFeatures, datasets: featureLineDatasets },
             options: {
                 responsive: true, maintainAspectRatio: false, devicePixelRatio: getChartDPR(),
-                plugins: {
-                    legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', generateLabels: cumulativeLegendLabels } },
-                    title: { display: false, text: 'Features per Year' },
-                    tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${context.raw}` } }
-                },
-                scales: {
-                    y: { beginAtZero: true, ticks: { precision: 0 }, stacked: isStacked },
-                    x: { ticks: { precision: 0 }, stacked: isStacked }
-                }
+                plugins: { legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', generateLabels: cumulativeLegendLabels } }, title: { display: false, text: 'Features per Year' }, tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${context.raw}` } } },
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 }, stacked: isStacked }, x: { ticks: { precision: 0 }, stacked: isStacked } }
             }
         }));
     } else {
-        registerChartInstance('featuresPerYearLineChart', new Chart(featuresPerYearCtx, {
-            type: 'line', data: { labels: [], datasets: [] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Features per Year (No Data)' } } }
-        }));
+        registerChartInstance('featuresPerYearLineChart', new Chart(featuresPerYearCtx, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Features per Year (No Data)' } } } }));
     }
-    
     if (isStacked) reorderDatasetsForStacking();
 }
 
 function renderDomainCharts() {
     destroyChartInstance('techniquesChart');
-    registerChartInstance('techniquesChart', renderBarOrPieChart(
-        document.getElementById('techniquesPieChart').getContext('2d'), 
-        prepareTechniquesData(), 
-        'Techniques Count', 
-        showPieCharts ? 'pie' : 'bar'
-    ));
-
+    registerChartInstance('techniquesChart', renderBarOrPieChart(document.getElementById('techniquesPieChart').getContext('2d'), prepareTechniquesData(), 'Techniques Count', showPieCharts ? 'pie' : 'bar'));
     destroyChartInstance('featuresChart');
-    registerChartInstance('featuresChart', renderBarOrPieChart(
-        document.getElementById('featuresPieChart').getContext('2d'), 
-        prepareFeaturesData(), 
-        'Features Count', 
-        showPieCharts ? 'pie' : 'bar'
-    ));
-    
+    registerChartInstance('featuresChart', renderBarOrPieChart(document.getElementById('featuresPieChart').getContext('2d'), prepareFeaturesData(), 'Features Count', showPieCharts ? 'pie' : 'bar'));
     destroyChartInstance('smtVsThtChart');
-    registerChartInstance('smtVsThtChart', renderBarOrPieChart(
-        document.getElementById('SMTvsTHTPieChart').getContext('2d'), 
-        prepareSMTvsTHTData(), 
-        'SMT vs THT', 
-        showPieCharts ? 'pie' : 'bar'
-    ));
-    
+    registerChartInstance('smtVsThtChart', renderBarOrPieChart(document.getElementById('SMTvsTHTPieChart').getContext('2d'), prepareSMTvsTHTData(), 'SMT vs THT', showPieCharts ? 'pie' : 'bar'));
     renderDomainLineCharts();
 }
 
-// --- Event Listeners ---
 document.addEventListener('DOMContentLoaded', () => {
     const featureGroupToggle = document.getElementById('featureGroupToggle');
     featureGroupToggle.addEventListener('change', function () {

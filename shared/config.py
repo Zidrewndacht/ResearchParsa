@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import yaml
 from openai import APIConnectionError, APITimeoutError, OpenAI
 
-DEBUG_MODE = False  # True = Flask Dev Server (auto-reload). False = Waitress (Production).
+DEBUG_MODE = True  # True = Flask Dev Server (auto-reload). False = Waitress (Production).
 
 # --- PATH OVERRIDES (Crucial for Test Isolation) ---
 # Allow environment variables to override default paths for testing/isolation

@@ -55,18 +55,13 @@ function copyBibtex(bibtexString, buttonElement) {
 /**
  * Generates a LaTeX longtable based on the currently visible (filtered) rows.
  */
+
 function copyLatexLongtable() {
     const buttonElement = document.getElementById('longtable-btn');
-    if (!buttonElement) {
-        console.error("Button #longtable-btn not found.");
-        alert('Error: Could not find the LaTeX copy button.');
-        return;
-    }
     const originalText = buttonElement.innerHTML;
-    const rows = tbody.querySelectorAll('tr[data-paper-id]:not(.filter-hidden)');
-    if (rows.length === 0) {
+    const papers = papersStore.getFiltered();
+    if (papers.length === 0) {
         alert('No visible rows found to generate LaTeX table.');
-        buttonElement.innerHTML = originalText;
         return;
     }
 
@@ -98,44 +93,19 @@ function copyLatexLongtable() {
 \\hline % Line before the last footer
 \\endlastfoot
 `;
-
-    rows.forEach((row, index) => {
-        const typeCell = row.cells[typeCellIndex];
-        const typeTitle = typeCell ? typeCell.getAttribute('title') || typeCell.textContent.trim() : '';
-        const titleCell = row.cells[titleCellIndex];
-        const titleText = titleCell ? titleCell.textContent.trim() : '';
-        const authorsCell = row.querySelector('td.hidden-data-cell[data-field="authors"]');
-        const authorsText = authorsCell ? authorsCell.textContent.trim() : '';
-        const yearCell = row.cells[yearCellIndex];
-        const yearText = yearCell ? yearCell.textContent.trim() : '';
-        const pageCountCell = row.cells[pageCountCellIndex];
-        const pageCountText = pageCountCell ? pageCountCell.textContent.trim() : '';
-        const venueCell = row.cells[journalCellIndex];
-        const venueText = venueCell ? venueCell.textContent.trim() : '';
-
-        const sanitizeForLatex = (str) => typeof str !== 'string' ? String(str) : str;
-        const type = sanitizeForLatex(typeTitle);
-        const title = sanitizeForLatex(titleText);
-        const authors = sanitizeForLatex(authorsText);
-        const year = sanitizeForLatex(yearText);
-        const pages = sanitizeForLatex(pageCountText);
-        const venue = sanitizeForLatex(venueText);
-
+    papers.forEach((paper, index) => {
+        const sanitize = s => typeof s !== 'string' ? String(s || '') : s;
+        const type = sanitize(paper.type);
+        const title = sanitize(paper.title);
+        const authors = sanitize(paper.authors);
+        const year = sanitize(paper.year);
+        const pages = sanitize(paper.page_count);
+        const venue = sanitize(paper.deannualized_conference || paper.journal);
         const rowColor = (index % 2 === 0) ? '' : '\\rowcolor{tableshade} ';
         latexContent += `${rowColor}${type} & ${title} & ${authors} & ${year} & ${pages} & ${venue} \\\\\n`;
     });
-
-    latexContent += `\\hline\n`;
-    latexContent += `\\end{longtable}\n\\end{landscape}\n`;
-
+    latexContent += `\\hline\n\\end{longtable}\n\\end{landscape}\n`;
     navigator.clipboard.writeText(latexContent)
-        .then(() => {
-            buttonElement.innerHTML = 'Copied!';
-            setTimeout(() => { buttonElement.innerHTML = originalText; }, 2000);
-        })
-        .catch(err => {
-            console.error('Failed to copy LaTeX table: ', err);
-            alert('Failed to copy LaTeX table to clipboard.');
-            buttonElement.innerHTML = originalText;
-        });
+        .then(() => { buttonElement.innerHTML = 'Copied!'; setTimeout(() => { buttonElement.innerHTML = originalText; }, 2000); })
+        .catch(() => { alert('Failed to copy LaTeX table.'); buttonElement.innerHTML = originalText; });
 }

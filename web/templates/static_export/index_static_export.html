@@ -147,7 +147,20 @@
                 <th style="display:none" colspan="5"></th>
             </tr>
         </thead>
-        {{ papers_table_static_export | safe }}
+        
+        <tbody>
+            <tr>
+                <td style="padding:0;" colspan="{{ total_cols }}">
+                    <div class="loading-overlay">
+                        <div class="header-branding"><span>Research</span><span style="font-weight: 600; color: var(--primary-ui-color);">Parsa</span></div>
+                        <div class="loading-spinner"></div>
+                        <div>Decompressing and loading data…</div>
+                    </div>
+                </td>
+                <td style="display:none" colspan="5"></td>
+            </tr>
+        </tbody>
+        
         {% include 'shared/papers_table_tfoot.html' %}
     </table>
 </div>
@@ -156,6 +169,9 @@
 <div id="aboutModal" class="modal"><div class="modal-small-content"><span class="close">&times;</span>{% include 'shared/about_modal_content.html' %}</div></div>
 
 <script>
+    window.__PARSA_DATA__ = {{ papers_json | safe }};
+    {{ core_js | safe }}
+    {{ export_renderers_js | safe }}
     {{ stats_core_js | safe }}
     {{ stats_generic_js | safe }}
     {{ stats_charts_js | safe }}
