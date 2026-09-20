@@ -1,13 +1,13 @@
 // static/js/core/virtual_scroll.js
 /**
  * Virtual scrolling with row unloading.
- * Keeps at most ~WINDOW_SIZE paper-groups in the DOM at any time.
- * Uses spacer <tr> elements above and below the rendered window to
- * preserve scrollbar geometry.
+ * Renders at most ~(BUFFER*2 + viewport) paper-groups at any time.
+ * Uses incremental add/remove at the edges — rows that stay in view
+ * are NEVER re-rendered, preserving expanded state and shading.
  */
 const virtualScroll = (() => {
     const ROW_HEIGHT = 58;       // estimated collapsed height per paper-group (px)
-    const BUFFER = 200;           // extra paper-groups rendered above/below viewport
+    const BUFFER = 100;           // extra paper-groups rendered above/below viewport
     let scrollContainer = null;
     let tbody = null;
     let spacerTop = null;
@@ -21,12 +21,10 @@ const virtualScroll = (() => {
         scrollContainer = container;
         tbody = tableBody;
         totalCols = cols;
-
         spacerTop = _makeSpacer();
         spacerBottom = _makeSpacer();
         tbody.appendChild(spacerTop);
         tbody.appendChild(spacerBottom);
-
         scrollContainer.addEventListener('scroll', _onScroll, { passive: true });
     }
 
@@ -35,7 +33,7 @@ const virtualScroll = (() => {
         tr.className = 'virtual-spacer';
         tr.style.height = '0px';
         const td = document.createElement('td');
-        td.colSpan = totalCols + 5; // +5 hidden cols
+        td.colSpan = totalCols + 5;
         td.style.padding = '0';
         td.style.border = 'none';
         td.style.height = '0px';
@@ -57,7 +55,7 @@ const virtualScroll = (() => {
         const total = papers.length;
 
         if (total === 0) {
-            _clearRendered();
+            _clearAllRendered();
             _setSpacerHeight(spacerTop, 0);
             _setSpacerHeight(spacerBottom, 0);
             renderedStart = 0;
@@ -67,71 +65,106 @@ const virtualScroll = (() => {
 
         const scrollTop = scrollContainer.scrollTop;
         const viewH = scrollContainer.clientHeight;
+        const newStart = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
+        const newEnd = Math.min(total, Math.ceil((scrollTop + viewH) / ROW_HEIGHT) + BUFFER);
 
-        let start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
-        let end = Math.min(total, Math.ceil((scrollTop + viewH) / ROW_HEIGHT) + BUFFER);
-
-        if (start === renderedStart && end === renderedEnd) return;
-
-        // Collapse any expanded detail/history rows that are about to be unloaded
-        _collapseExpandedInRange(renderedStart, renderedEnd, start, end);
-
-        _clearRendered();
-
-        _setSpacerHeight(spacerTop, start * ROW_HEIGHT);
-        _setSpacerHeight(spacerBottom, Math.max(0, (total - end)) * ROW_HEIGHT);
+        if (newStart === renderedStart && newEnd === renderedEnd) return;
 
         const isExport = document.body.id === 'html-export';
-        const slice = papers.slice(start, end);
-        const frag = tableRenderer.renderBatch(slice, isExport);
-        tbody.insertBefore(frag, spacerBottom);
 
-        renderedStart = start;
-        renderedEnd = end;
+        if (renderedStart === -1) {
+            // --- Initial render ---
+            const fragment = document.createDocumentFragment();
+            for (let i = newStart; i < newEnd; i++) {
+                _appendPaperToFragment(fragment, papers[i], i, isExport);
+            }
+            tbody.insertBefore(fragment, spacerBottom);
+        } else {
+            // --- Incremental update: remove out-of-range, add new ---
 
-        // Post-render visual hooks
-        _applyAlternatingShading();
-        if (document.body.id !== 'html-export') {
-            _applyDuplicateShading();
+            // Remove from top: [renderedStart, newStart)
+            for (let i = renderedStart; i < newStart && i < renderedEnd; i++) {
+                _removePaperByIndex(papers, i);
+            }
+            // Remove from bottom: [newEnd, renderedEnd)
+            for (let i = Math.max(newEnd, renderedStart); i < renderedEnd; i++) {
+                _removePaperByIndex(papers, i);
+            }
+
+            // Add at top: [newStart, min(renderedStart, newEnd))
+            if (newStart < renderedStart) {
+                const topEnd = Math.min(renderedStart, newEnd);
+                const frag = document.createDocumentFragment();
+                for (let i = newStart; i < topEnd; i++) {
+                    _appendPaperToFragment(frag, papers[i], i, isExport);
+                }
+                spacerTop.after(frag);
+            }
+
+            // Add at bottom: [max(renderedEnd, newStart), newEnd)
+            if (newEnd > renderedEnd) {
+                const bottomStart = Math.max(renderedEnd, newStart);
+                const frag = document.createDocumentFragment();
+                for (let i = bottomStart; i < newEnd; i++) {
+                    _appendPaperToFragment(frag, papers[i], i, isExport);
+                }
+                tbody.insertBefore(frag, spacerBottom);
+            }
         }
-        restoreDetailState();
+
+        // Update spacers
+        _setSpacerHeight(spacerTop, newStart * ROW_HEIGHT);
+        _setSpacerHeight(spacerBottom, Math.max(0, (total - newEnd)) * ROW_HEIGHT);
+
+        renderedStart = newStart;
+        renderedEnd = newEnd;
+
+        // Duplicate shading (cheap, only touches rendered rows)
+        if (!isExport) _applyDuplicateShading();
     }
 
-    function reset() {
-        renderedStart = -1;
-        renderedEnd = -1;
-        scrollContainer.scrollTop = 0;
-        update();
+    // --- Row creation with deterministic shading ---
+    function _appendPaperToFragment(fragment, paper, arrayIndex, isExport) {
+        const rows = tableRenderer.renderPaper(paper, isExport);
+        // Shading is determined by position in the FILTERED ARRAY, not render order.
+        // This is stable regardless of scroll position.
+        const shade = (arrayIndex & 1) ? 'alt-shade-2' : 'alt-shade-1';
+        for (const r of rows) {
+            r.classList.add(shade);
+            fragment.appendChild(r);
+        }
     }
 
-    function refresh() {
-        // Re-render current window (e.g. after cell update)
-        const s = renderedStart, e = renderedEnd;
-        renderedStart = -1;
-        renderedEnd = -1;
-        // Preserve scroll position
-        const st = scrollContainer.scrollTop;
-        update();
-        scrollContainer.scrollTop = st;
+    // --- Row removal (collapse before removing) ---
+    function _removePaperByIndex(papers, index) {
+        if (index < 0 || index >= papers.length) return;
+        const paperId = String(papers[index].id);
+        const mainRow = tbody.querySelector(`tr[data-paper-id="${_cssEscape(paperId)}"]`);
+        if (!mainRow) return;
+
+        const detailRow = mainRow.nextElementSibling;
+        const historyRow = detailRow ? detailRow.nextElementSibling : null;
+
+        // Collapse expanded rows before removal
+        if (detailRow && detailRow.classList.contains('expanded')) {
+            detailRow.classList.remove('expanded');
+        }
+        if (historyRow && historyRow.classList.contains('expanded')) {
+            historyRow.classList.remove('expanded');
+        }
+        // Reset toggle buttons
+        const btns = mainRow.querySelectorAll('.toggle-btn.toggle-pressed');
+        for (const b of btns) {
+            b.classList.remove('toggle-pressed');
+            b.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
+        }
+
+        if (historyRow) historyRow.remove();
+        if (detailRow) detailRow.remove();
+        mainRow.remove();
     }
 
-    function getRenderedRange() {
-        return { start: renderedStart, end: renderedEnd };
-    }
-
-    function ensurePaperVisible(paperId) {
-        const papers = papersStore.getFiltered();
-        const idx = papers.findIndex(p => String(p.id) === String(paperId));
-        if (idx === -1) return null;
-        // Scroll to that position
-        scrollContainer.scrollTop = idx * ROW_HEIGHT;
-        update();
-        return document.querySelector(`tr[data-paper-id="${CSS.escape ? CSS.escape(paperId) : paperId}"]`);
-    }
-
-    // --- Internal helpers ---
-
-    function _clearRendered() {
+    function _clearAllRendered() {
         const rows = tbody.querySelectorAll('tr[data-paper-id], tr.detail-row, tr.history-row');
         for (const r of rows) r.remove();
     }
@@ -142,41 +175,44 @@ const virtualScroll = (() => {
         if (td) td.style.height = px + 'px';
     }
 
-    function _collapseExpandedInRange(oldStart, oldEnd, newStart, newEnd) {
-        // Collapse expanded rows that will be removed
-        const rows = tbody.querySelectorAll('tr.detail-row.expanded, tr.history-row.expanded');
-        for (const r of rows) {
-            r.classList.remove('expanded');
-        }
-        // Also reset toggle buttons
-        const btns = tbody.querySelectorAll('.toggle-btn.toggle-pressed');
-        for (const b of btns) {
-            b.classList.remove('toggle-pressed');
-            b.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
-        }
+    // --- Public API ---
+    function reset() {
+        _clearAllRendered();
+        renderedStart = -1;
+        renderedEnd = -1;
+        scrollContainer.scrollTop = 0;
+        update();
     }
 
-    function _applyAlternatingShading() {
-        const rows = tbody.querySelectorAll('tr[data-paper-id]');
-        let idx = 0;
-        for (const main of rows) {
-            const shade = (idx & 1) ? 'alt-shade-2' : 'alt-shade-1';
-            main.classList.toggle('alt-shade-1', shade === 'alt-shade-1');
-            main.classList.toggle('alt-shade-2', shade === 'alt-shade-2');
-            const detail = main.nextElementSibling;
-            if (detail && detail.classList.contains('detail-row')) {
-                detail.classList.toggle('alt-shade-1', shade === 'alt-shade-1');
-                detail.classList.toggle('alt-shade-2', shade === 'alt-shade-2');
-            }
-            const history = detail && detail.nextElementSibling;
-            if (history && history.classList.contains('history-row')) {
-                history.classList.toggle('alt-shade-1', shade === 'alt-shade-1');
-                history.classList.toggle('alt-shade-2', shade === 'alt-shade-2');
-            }
-            idx++;
-        }
+    function refresh() {
+        // Used after AJAX cell updates to re-render current window
+        const st = scrollContainer.scrollTop;
+        _clearAllRendered();
+        renderedStart = -1;
+        renderedEnd = -1;
+        update();
+        scrollContainer.scrollTop = st;
     }
 
+    function ensurePaperVisible(paperId) {
+        const papers = papersStore.getFiltered();
+        const idx = papers.findIndex(p => String(p.id) === String(paperId));
+        if (idx === -1) return null;
+        scrollContainer.scrollTop = idx * ROW_HEIGHT;
+        update();
+        return tbody.querySelector(`tr[data-paper-id="${_cssEscape(String(paperId))}"]`);
+    }
+
+    function getRenderedRange() {
+        return { start: renderedStart, end: renderedEnd };
+    }
+
+    function _cssEscape(str) {
+        if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(str);
+        return str.replace(/([^\w-])/g, '\\$1');
+    }
+
+    // --- Duplicate shading (only rendered rows) ---
     function _applyDuplicateShading() {
         const rows = tbody.querySelectorAll('tr[data-paper-id]');
         const journalCounts = new Map();
