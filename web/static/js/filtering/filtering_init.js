@@ -75,6 +75,31 @@ function _wireEvents() {
         if (tabButton) switchHistoryTab(tabButton);
     });
     document.getElementById('longtable-btn')?.addEventListener('click', copyLatexLongtable);
+
+    // --- Edit lock toggle (server-only; exports are already read-only) ---
+    const lockBtn = document.getElementById('edit-lock-btn');
+    if (lockBtn) {
+        const applyLockState = (locked) => {
+            document.body.classList.toggle('edit-locked', locked);
+            lockBtn.textContent = locked ? '🔒' : '🔓';
+            lockBtn.title = locked
+                ? 'Unlock to allow manual edits'
+                : 'Lock to prevent accidental manual edits';
+        };
+
+        // Default to LOCKED when no preference is stored yet
+        const stored = localStorage.getItem('parsa_edit_locked');
+        applyLockState(stored === null ? true : stored === '1');
+
+        lockBtn.addEventListener('click', () => {
+            const locked = document.body.classList.toggle('edit-locked');
+            lockBtn.textContent = locked ? '🔒' : '🔓';
+            lockBtn.title = locked
+                ? 'Unlock to allow edits'
+                : 'Lock to prevent accidental edits';
+            localStorage.setItem('parsa_edit_locked', locked ? '1' : '0');
+        });
+    }
 }
 
 // ============================================================================

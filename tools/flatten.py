@@ -336,8 +336,8 @@ def main():
         
         #### #### # Shared module
         # "shared/__init__.py",
-        "shared/config.py",
-        "shared/db.py",
+        # "shared/config.py",
+        # "shared/db.py",
         
         #### #### #Web module
         # "web/__init__.py",

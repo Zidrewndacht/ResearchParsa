@@ -152,6 +152,9 @@ table {
     border-radius: 6px
 }
 
+thead {
+        background: linear-gradient(var(--primary-ui-color-darker) 95%,transparent 99%);
+}
 td {
     padding: 9px 6px
 }
@@ -224,7 +227,7 @@ font-size: 9.5pt;
 font-weight: 400;
 transition: filter .3s ease-in-out;
 text-align: center;
-box-shadow: inset 0 0 0 .5px #0006;
+box-shadow: inset 0 0 0 1px #0003;
 /* Add padding for better arrow display */
 padding: 4px 8px;
 min-width: 44px;
@@ -236,7 +239,7 @@ min-width: 44px;
 /* New: Pressed state for hide buttons */
 .toggle-btn.toggle-pressed {
 background: linear-gradient(180deg, hsl(210, 24%, 82%) 0%, hsl(210, 32%, 88%) 60%);
-box-shadow: inset 0 0 0 .5px #0006, inset 0 2px 4px rgba(0,0,0,.2);
+box-shadow: inset 0 0 0 1px #0004, inset 0 2px 4px rgba(0,0,0,.2);
 }
 
 #apply-serverside-filters:hover,#html-export .action-btn:hover,.bibtex-copy-btn:hover,
@@ -629,7 +632,7 @@ tr.filter-hidden {
 
 #counts-footer {
     position: sticky;
-    bottom: 0;
+    bottom: -1px;
     z-index: 998;
     border-radius: 6px
 }
@@ -1838,3 +1841,53 @@ tr.focus-highlight > td {
 
 /* Same slide feel as the existing collapse/expand; only `top` animates. */
 .table-container thead th { transition: top .15s ease-in-out; }
+
+/* ==========================================================================
+   Scroll progress slit — 5th thead row; rides the sticky header system
+   ========================================================================== */
+.table-container thead tr:nth-child(5) th {
+    top: calc(var(--pin4, 0px) + var(--hdr-h4, 0px));
+    /* background: transparent; */
+    transform: translateY(-1px);
+}
+.scroll-progress-cell {
+    opacity: .9;
+    padding: 0;
+    height: 5px;
+    background: var(--detail-button-background);
+    box-shadow: none;
+    z-index: 1;
+    pointer-events: none;
+}
+.scroll-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg,var(--inferred-ui-color),var(--inferred-gradient-end-color));
+    transform-origin: 0 50%;
+    transform: scaleX(var(--scroll-progress, 0));
+}
+
+
+/* ==========================================================================
+   Edit lock button — prevents accidental clicks on definitive cells
+   ========================================================================== */
+#edit-lock-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    padding: 0 2px;
+    line-height: 1;
+    opacity: 0.75;
+    transition: opacity 0.2s, transform 0.15s;
+    font-family: "Segoe UI Emoji Windows 11", "Twemoji Mozilla";
+    transform: scale(2) translate(1px,-1.5px);
+}
+#edit-lock-btn:hover {
+    opacity: 1;
+    transform: scale(2) translate(1px,-1.5px);
+}
+
+body.edit-locked .editable-status {
+    pointer-events: none;
+    cursor: default;
+}

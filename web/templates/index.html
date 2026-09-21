@@ -153,8 +153,8 @@
                 <th class="inferred-header" id="inferred-header-title" colspan="{{ inferred_colspan }}">
                     <div>
                         <span>Inferred data </span>
-                        <div style="margin:0; padding:0">
-                            <!-- Potential misclassifications: -->
+                        <div style="margin:0; padding:0; display: flex; align-items: center; gap: 4px;">
+                            <button type="button" id="edit-lock-btn" title="Unlock to allow manual edits">🔒</button>
                             <input type="checkbox" title="Enable to only show papers marked as misclassified by the verifier" id="hide-approved-checkbox" style="margin: 0 0 0 8px;">
                         </div>
                     </div>
@@ -247,6 +247,11 @@
                 <th class="rotate-header"><div>Details</div></th>
 
                 {#<!-- 5. Hidden Metadata -->#}
+                <th style="display:none" colspan="5"></th>
+            </tr>
+            {#<!-- ROW 5: Scroll progress slit -->#}
+            <tr>
+                <th class="scroll-progress-cell" colspan="{{ total_cols }}"><div class="scroll-progress-fill"></div></th>
                 <th style="display:none" colspan="5"></th>
             </tr>
         </thead>

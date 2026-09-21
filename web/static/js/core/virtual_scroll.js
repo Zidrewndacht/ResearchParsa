@@ -19,7 +19,7 @@ const virtualScroll = (() => {
 
     let _lastScrollTop = 0;
     let _headerExpanded = false;
-
+    
     /* Measure the three natural row heights once; row 1 is 0px in the export. */
     function _measureHeaderRows() {
         const rows = document.querySelectorAll('#papersTable thead tr');
@@ -27,9 +27,14 @@ const virtualScroll = (() => {
         scrollContainer.style.setProperty('--hdr-h1', (rows[0].offsetHeight || 0) + 'px');
         scrollContainer.style.setProperty('--hdr-h2', (rows[1].offsetHeight || 0) + 'px');
         scrollContainer.style.setProperty('--hdr-h3', (rows[2].offsetHeight || 0) + 'px');
+        scrollContainer.style.setProperty('--hdr-h4', (rows[3].offsetHeight || 0) + 'px');  // ← ADD
     }
 
     function _updateHeaderState(scrollTop) {
+        // Scroll progress slit: compositor-only scaleX, no extra listeners
+        const max = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+        scrollContainer.style.setProperty('--scroll-progress', max > 0 ? (scrollTop / max).toFixed(4) : '0');  // ← ADD
+
         if (scrollTop <= 0) {          // top of table: pure natural layout, as today
             _lastScrollTop = scrollTop;
             _setHeaderExpanded(false);
