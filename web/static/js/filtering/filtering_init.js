@@ -14,9 +14,7 @@ function bootApp() {
         papersStore.load(data);
         initializeClientFilters();
         _wireEvents();
-        applyLocalFilters();
-        // Deep-link after initial render settles
-        setTimeout(() => _handleFocusPaper(), 500);
+        applyLocalFilters(() => _handleFocusPaper());
     } else {
         // Fetch from API with current server-side filter params
         const params = new URLSearchParams(window.location.search);
@@ -38,9 +36,7 @@ function bootApp() {
 
                 initializeClientFilters();
                 _wireEvents();
-                applyLocalFilters();
-                // Deep-link after initial render settles
-                setTimeout(() => _handleFocusPaper(), 500);
+                applyLocalFilters(() => _handleFocusPaper());
             })
             .catch(err => {
                 console.error('Failed to load papers:', err);
@@ -90,30 +86,25 @@ function _handleFocusPaper() {
     if (!window.FOCUS_PAPER_ID) return;
     const paperId = String(window.FOCUS_PAPER_ID);
 
-    // Set search to the paper ID → it becomes the only visible paper
     searchInput.value = paperId;
-    applyLocalFilters();
-
-    // Wait for the filter + render pipeline to complete
-    setTimeout(() => {
+    applyLocalFilters(() => {
         let row = virtualScroll.ensurePaperVisible(paperId);
-        if (!row) {
-            // Fallback: clear search, show all, try to find the row anyway
+        if (row) {
+            _highlightAndOpen(row);
+        } else {
+            // Fallback: clear search, show all, try again
             searchInput.value = '';
-            applyLocalFilters();
-            setTimeout(() => {
+            applyLocalFilters(() => {
                 row = virtualScroll.ensurePaperVisible(paperId);
-                if (!row) {
+                if (row) {
+                    _highlightAndOpen(row);
+                } else {
                     console.warn('[focus_paper] Paper not found: ' + paperId);
                     alert('Paper "' + paperId + '" was not found in the database.');
-                    return;
                 }
-                _highlightAndOpen(row);
-            }, 500);
-        } else {
-            _highlightAndOpen(row);
+            });
         }
-    }, 500);
+    });
 }
 
 function _highlightAndOpen(row) {

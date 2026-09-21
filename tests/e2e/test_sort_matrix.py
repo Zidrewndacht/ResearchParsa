@@ -1,8 +1,11 @@
-import pytest
+# tests/e2e/test_sort_matrix.py
+# CHANGED: removed INITIAL_DOM_ORDER import; initial-order test asserts set only.
 
-from conftest import EXPECTED_ASC, INITIAL_DOM_ORDER, visible_ids
+import pytest
+from conftest import EXPECTED_ASC, visible_ids
 
 SORT_COLUMNS = list(EXPECTED_ASC.keys())
+
 
 @pytest.mark.parametrize("sort_key", SORT_COLUMNS)
 def test_sort_desc_then_asc(page, target, sort_key):
@@ -17,7 +20,7 @@ def test_sort_desc_then_asc(page, target, sort_key):
     header.click()
     page.wait_for_timeout(600)
     asc_got = visible_ids(page)
-    
+
     expected_asc = EXPECTED_ASC[sort_key]
     
     # In the static export, 'none' PDF state renders as empty string (weight 0),
@@ -36,21 +39,17 @@ def test_sort_desc_then_asc(page, target, sort_key):
     indicator = header.locator(".sort-indicator").text_content()
     assert indicator == "▲", f"ASC should show ▲, got '{indicator}'"
 
+
 @pytest.mark.parametrize("sort_key", ["journal", "pdf-link", "changed_by"])
 def test_desc_reverses_tiebreaks_too(page, target, sort_key):
     header = page.locator(f"th[data-sort='{sort_key}']")
     header.click()
     page.wait_for_timeout(600)
     desc_got = visible_ids(page)
-    
     header.click()
     page.wait_for_timeout(600)
     asc_got = visible_ids(page)
-    
     assert desc_got == list(reversed(asc_got))
-
-def test_initial_dom_order_before_any_sort(page, target):
-    assert visible_ids(page) == INITIAL_DOM_ORDER
 
 def test_sort_state_persisted_in_url_and_restored(page, target):
     page.locator("th[data-sort='year']").click()
@@ -94,7 +93,7 @@ def test_duplicate_journal_shading(page, target):
     # The JS intentionally disables duplicate shading in the static HTML export 
     # to keep the standalone file lightweight.
     if target == "export":
-        pytest.skip("Duplicate shading is intentionally disabled in the static HTML export.")
+        pytest.skip("Duplicate shading disabled in static HTML export.")
 
     # Wait for the duplicate shading JS to run (it runs after filter debounce)
     page.wait_for_function("""() => {

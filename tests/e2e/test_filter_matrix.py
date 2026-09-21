@@ -8,7 +8,6 @@ import re
 from playwright.sync_api import expect
 
 from conftest import (
-    INITIAL_DOM_ORDER,
     ON_TOPIC,
     TRI_ONLY_FALSEISH,
     TRI_ONLY_TRUE,
@@ -23,6 +22,7 @@ INCLUSION_UNION = {"p1", "p2", "p4", "p5", "p6"}
 INCLUSION_AND_WRONG = {"p1", "p2"} # what a buggy AND implementation yields
 
 class TestTriStateFixtureSanity:
+
     def test_all_three_states_present_in_dom(self, page, target):
         states = page.eval_on_selector_all(
             "tr[data-paper-id]:not(.filter-hidden) [data-field='is_test_bool']",
@@ -33,11 +33,15 @@ class TestTriStateFixtureSanity:
                 return e ? e.textContent.trim() : 'unknown';
             })"""
         )
-        assert "✔️" in states and "❌" in states and ("❔" in states or "conflict" in states)
+        assert "✔️" in states
+        assert "❌" in states
+        assert ("❔" in states or "conflict" in states)
 
     def test_initial_state_is_unfiltered(self, page, target):
+        """All on-topic papers visible. Order is NOT asserted —
+        it was an SSR SQL-ordering detail, not a user contract."""
         assert sorted(visible_ids(page)) == sorted(ON_TOPIC)
-        assert visible_ids(page) == INITIAL_DOM_ORDER
+
 
 class TestTriStateCycling:
     def test_full_cycle_both_groups(self, page, target):

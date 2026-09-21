@@ -367,6 +367,11 @@ def main():
         "web/static/js/stats/stats_domain.js",
         "web/static/js/stats/stats_charts.js",
         "web/static/js/stats/stats_latex.js",
+        
+        "web/static/js/core/export_renderers.js",
+        "web/static/js/core/papers_store.js",
+        "web/static/js/core/table_renderer.js",
+        "web/static/js/core/virtual_scroll.js",
 
         "web/static/css/style.css",
         # "web/static/css/agreement_report.css",

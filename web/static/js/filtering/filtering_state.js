@@ -165,7 +165,7 @@ function initializeClientFilters() {
     if (urlParams.get('hide_approved') === '1') hideApprovedCheckbox.checked = true;
     if (urlParams.get('hide_offtopic') === '1') hideOfftopicCheckbox.checked = true;
 
-    const searchValueFromUrl = urlParams.get('search');
+    const searchValueFromUrl = urlParams.get('search') ?? urlParams.get('search_query');    //search_query is legacy, not sure if worth keeping, shouldn't hurt.
     if (searchValueFromUrl !== null) searchInput.value = searchValueFromUrl;
 
     const openDetailsParam = urlParams.get('open_details');

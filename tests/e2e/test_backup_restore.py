@@ -18,6 +18,7 @@ import tempfile
 import zstandard as zstd
 from playwright.sync_api import expect
 
+from conftest import expand_detail
 
 class TestBackup:
     def test_backup_creates_download(self, page):
@@ -222,28 +223,20 @@ class TestRestore:
         backup_path = os.path.join(tempfile.gettempdir(), "roundtrip_backup.parsa.tzst")
         download.save_as(backup_path)
 
-        # Step 2: Modify a paper (change user_trace)
-        page.goto(page.url.split("?")[0])
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(600)
-
-        details_btn = page.locator("tr[data-paper-id='p1'] .toggle-btn:not(.history-btn)")
-        details_btn.click()
-        form = page.locator("form[data-paper-id='p1']")
-        expect(form).to_be_visible()
+        # Step 2: Modify a paper
+        form = expand_detail(page, "p1")
         form.locator("textarea[name='user_trace']").fill("MODIFIED_FOR_RESTORE_TEST")
-
         with page.expect_response(
-            lambda resp: "/update_paper" in resp.url and resp.status == 200
+            lambda r: "/update_paper" in r.url and r.status == 200
         ):
             form.locator(".save-btn").click()
         page.wait_for_timeout(500)
 
-        # Verify modification took effect
+        # Verify modification through the detail form
         page.reload(wait_until="networkidle")
         page.wait_for_timeout(600)
-        hidden_cell = page.locator("tr[data-paper-id='p1'] td.hidden-data-cell[data-field='user_trace']")
-        expect(hidden_cell).to_have_text("MODIFIED_FOR_RESTORE_TEST")
+        form = expand_detail(page, "p1")
+        assert form.locator("textarea[name='user_trace']").input_value() == "MODIFIED_FOR_RESTORE_TEST"
 
         # Step 3: Restore from backup
         page.click("#export-btn")
@@ -263,12 +256,12 @@ class TestRestore:
         ):
             file_chooser.set_files(backup_path)
 
-        # Step 4: Verify data was restored (modification should be gone)
+        # Step 4: Verify restoration through the detail form
         page.reload(wait_until="networkidle")
         page.wait_for_timeout(1000)
-        hidden_cell = page.locator("tr[data-paper-id='p1'] td.hidden-data-cell[data-field='user_trace']")
-        text = hidden_cell.text_content()
-        assert "MODIFIED_FOR_RESTORE_TEST" not in text, \
+        form = expand_detail(page, "p1")
+        restored = form.locator("textarea[name='user_trace']").input_value()
+        assert "MODIFIED_FOR_RESTORE_TEST" not in restored, \
             "Restore should have reverted the modification"
 
         # Cleanup

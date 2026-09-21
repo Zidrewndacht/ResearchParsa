@@ -37,7 +37,7 @@ function generateLatexAuthors() {
     const primaryAuthorCounts = {}; 
     const surveyAuthorCounts = {};  
     for (const paper of papers) {
-        const isSurvey = tableRenderer.getBool(paper.classification || {}, 'is_survey') === true;
+        const isSurvey = papersStore.fieldIsTrue(paper.classification || {}, paper.main_certainty || {}, 'is_survey');
         const authorsText = paper.authors || '';
         if (authorsText) {
             const authorsList = authorsText.split(';').map(author => author.trim()).filter(author => author.length > 0);
@@ -88,7 +88,7 @@ function generateLatexMetrics() {
         const journalName = paper.deannualized_conference || paper.journal || '';
         const type = (paper.type || '').toLowerCase();
         const authorsText = paper.authors || '';
-        const isSurvey = tableRenderer.getBool(paper.classification || {}, 'is_survey') === true;
+        const isSurvey = papersStore.fieldIsTrue(paper.classification || {}, paper.main_certainty || {}, 'is_survey');
         if (isSurvey) surveyPaperCount++; else primaryPaperCount++;
         if (journalName) {
             if (type === 'article') { 

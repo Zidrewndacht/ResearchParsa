@@ -39,7 +39,11 @@ const papersStore = (() => {
 
         // Export-only server-side mirrors (year, page count, offtopic)
         if (state.isExport) {
-            if (state.hideOfftopic && _getBool(c, 'is_offtopic') === true) return false;
+            if (state.hideOfftopic) {   // For offtopic, we prefer to keep conflicts visible together with on-topic and unknown:
+                const certMap = paper.main_certainty || {};
+                const isoCert = certMap['is_offtopic'] || 'solid';
+                if (isoCert !== 'conflict' && _getBool(c, 'is_offtopic') === true) return false;
+            }
             if (state.minPageCount > 0) {
                 const pc = paper.page_count;
                 if (pc !== null && pc !== undefined && pc !== '' && parseInt(pc, 10) < state.minPageCount) return false;
@@ -59,18 +63,25 @@ const papersStore = (() => {
         }
 
         // Tri-state filters
+        const cert = paper.main_certainty || {};
         for (const [key, cfg] of Object.entries(TRI_STATE_FILTERS)) {
             const st = state.triStateStates[key];
             if (st === 'all') continue;
+            const certainty = cert[cfg.field] || 'solid';
             const val = _getBool(c, cfg.field);
-            if (st === 'only_true' && val !== true) return false;
-            if (st === 'only_false' && val === true) return false;
+            // Conflicted fields are "not true" (matches v1.4.4 DOM behavior where ⚠️ ≠ ✔️)
+            const isTrue = (val === true) && (certainty !== 'conflict');
+            if (st === 'only_true' && !isTrue) return false;
+            if (st === 'only_false' && isTrue) return false;
         }
 
         // Hide approved
         if (state.hideApproved) {
+            const cert = paper.main_certainty || {};
+            const vCert = cert['verified'] || 'solid';
             const v = paper.verified;
-            if (v === 1 || v === true || v === '1' || v === 'true') return false;
+            // Conflicted verified → shows ⚠️ in v1.4.4, not ✔️ → not hidden
+            if (vCert !== 'conflict' && (v === 1 || v === true || v === '1' || v === 'true')) return false;
         }
 
         // Inclusion filters
@@ -81,15 +92,15 @@ const papersStore = (() => {
                 const fields = INCLUSION_FILTERS[g];
                 if (!fields) continue;
                 for (const fPath of fields) {
-                    if (_getBool(c, fPath) === true) { matchesAny = true; break; }
+                    if (_fieldIsTrue(c, cert, fPath)) { matchesAny = true; break; }
                 }
                 if (matchesAny) break;
             }
             if (!matchesAny) return false;
-        }
+                    }
 
         return true;
-    }
+        }
 
     function applyFilters(state) {
         filteredPapers = allPapers.filter(p => paperMatchesFilters(p, state));
@@ -152,6 +163,40 @@ const papersStore = (() => {
         return null;
     }
 
+    // --- Text-presence awareness ---
+    // Builds a Set of paths that are render_type === 'text_presence'
+    let _textPresencePaths = null;
+    function _getTextPresencePaths() {
+        if (_textPresencePaths) return _textPresencePaths;
+        _textPresencePaths = new Set();
+        for (const group of APP_CONFIG.groups) {
+            if (group.filter_type === 'inclusion' || group.filter_type === 'none') {
+                for (const fd of group.fields || []) {
+                    if (fd.render_type === 'text_presence') {
+                        _textPresencePaths.add(`${group.json_path}.${fd.key}`);
+                    }
+                }
+            }
+        }
+        return _textPresencePaths;
+    }
+
+    /**
+     * Determines if a classification field should be considered "true".
+     * For text_presence fields: non-empty text = true.
+     * For boolean fields: standard boolean check.
+     */
+    function _fieldIsTrue(classification, certaintyMap, path) {
+        const cert = (certaintyMap || {})[path] || 'solid';
+        if (cert === 'conflict') return false;   // ⚠️ is never "true"
+        if (_getTextPresencePaths().has(path)) {
+            const val = _getPath(classification, path);
+            return !!(val && String(val).trim());
+        }
+        return _getBool(classification, path) === true;
+    }
+
+
     function _buildSearchHaystack(paper) {
         let s = ' ' + String(paper.id || '').toLowerCase();
         s += ' ' + (paper.title || '').toLowerCase();
@@ -161,9 +206,27 @@ const papersStore = (() => {
         s += ' ' + (paper.user_trace || '').toLowerCase();
         s += ' ' + (paper.journal || '').toLowerCase();
         s += ' ' + (paper.doi || '').toLowerCase();
+        s += ' ' + String(paper.year || '').toLowerCase();
+        s += ' ' + String(paper.page_count || '').toLowerCase();
+        s += ' ' + (paper.type || '').toLowerCase();
+        s += ' ' + (paper.deannualized_conference || '').toLowerCase();
+        s += ' ' + (paper.issn || '').toLowerCase();
+        //useless for search, intentionally left out, below. This is not a regression:
+        //s += ' ' + (paper.pages || '').toLowerCase();                     
+        // s += ' ' + (paper.volume || '').toLowerCase();                   
+        // s += ' ' + (paper.month || '').toLowerCase();                    
+        // s += ' ' + String(paper.estimated_score ?? '').toLowerCase();    
+        // s += ' ' + (paper.verified_by || '').toLowerCase();              
+        // s += ' ' + (paper.changed_by || '').toLowerCase();               
+        // s += ' ' + (paper.changed_formatted || '').toLowerCase();        
+        // s += ' ' + (paper.pdf_state || '').toLowerCase();                
+        // relevance lives in classification
+        const c = paper.classification || {};
+        const rel = _getPath(c, 'relevance');
+        if (rel !== null && rel !== undefined) s += ' ' + String(rel).toLowerCase();
         // editable field hidden values
         for (const field of APP_CONFIG.editable_fields || []) {
-            const v = _getPath(paper.classification, field.json_path);
+            const v = _getPath(c, field.json_path);
             if (v) s += ' ' + String(v).toLowerCase();
         }
         return s;
@@ -222,8 +285,15 @@ const papersStore = (() => {
             case 'journal': return (paper.deannualized_conference || paper.journal || '').toLowerCase();
             case 'title': return (paper.title || '').toLowerCase();
             default: {
-                // Editable status sort (tri-state / inclusion boolean fields)
-                const val = _getBool(c, sortBy);
+                // Editable status sort (tri-state / inclusion boolean / text-presence fields)
+                // For text_presence fields: non-empty text = ✔️ (true), empty/null = ❌ (false)
+                let val;
+                if (_getTextPresencePaths().has(sortBy)) {
+                    const textVal = _getPath(c, sortBy);
+                    val = !!(textVal && String(textVal).trim());
+                } else {
+                    val = _getBool(c, sortBy);
+                }
                 const certainty = cert[sortBy] || 'solid';
                 if (certainty === 'conflict') return 3.25;
                 const base = val === true ? 2 : (val === false ? 1 : 0);
@@ -238,6 +308,7 @@ const papersStore = (() => {
     return {
         load, getAll, getFiltered, getFilteredCount, getAllCount,
         getPaperById, applyFilters, applySort, updatePaper,
-        paperMatchesFilters, makeComparator
+        paperMatchesFilters, makeComparator,
+        fieldIsTrue: _fieldIsTrue
     };
 })();

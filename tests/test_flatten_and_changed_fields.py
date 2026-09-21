@@ -42,7 +42,7 @@ class TestChangedFieldsDetection:
         ])
         result = prepare_history_log_data(paper)
         # Reversed: T2 first, T1 second
-        assert result[0]["changed_fields"] == set()  # T2 vs T1: no change
+        assert not result[0]["changed_fields"]  # Replaces == set()
 
     def test_single_field_change_detected(self):
         paper = self._make_paper([
@@ -88,4 +88,4 @@ class TestChangedFieldsDetection:
         result = prepare_history_log_data(paper)
         # T3 is compared to T1 (T2 is invalid, skipped)
         t3_entry = result[0]  # reversed: T3, T2, T1
-        assert t3_entry["changed_fields"] == set()  # T3 == T1
+        assert not t3_entry["changed_fields"]   # Replaces == set()

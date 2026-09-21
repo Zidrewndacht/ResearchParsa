@@ -58,9 +58,12 @@ function uploadPDFForPaper(paperId) {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                //console.log("PDF uploaded successfully for paper ID:", paperId);
+                // Update the in-memory store so sort/filter/counts see the new state
+                papersStore.updatePaper(paperId, {
+                    pdf_filename: data.pdf_filename,
+                    pdf_state: data.pdf_state
+                });
                 // Update the table row with the new PDF info
-                // Pass the filename and state received from the server
                 updateTableRowWithPDFData(paperId, data.pdf_filename, data.pdf_state);
             } else {
                 console.error("Upload failed:", data.message);

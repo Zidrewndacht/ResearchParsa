@@ -88,10 +88,10 @@ function collectDomainYearlyData(papers) {
             FEATURE_FIELDS.forEach(f => yearlyFeatures[year][f] = 0);
         }
         TECHNIQUE_FIELDS.forEach(field => {
-            if (tableRenderer.getBool(c, field) === true) yearlyTechniques[year][field]++;
+            if (papersStore.fieldIsTrue(c, paper.main_certainty, field)) yearlyTechniques[year][field]++;
         });
         FEATURE_FIELDS.forEach(field => {
-            if (tableRenderer.getBool(c, field) === true) yearlyFeatures[year][field]++;
+            if (papersStore.fieldIsTrue(c, paper.main_certainty, field)) yearlyFeatures[year][field]++;
         });
     }
     latestYearlyData.techniques = yearlyTechniques;

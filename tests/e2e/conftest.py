@@ -15,37 +15,23 @@ Seed design rules (do NOT change values without recomputing EXPECTED_ASC):
       union (OR):  {p1, p2, p4, p5, p6}
       intersection (AND, WRONG):    {p1, p2}
 """
-import json
-import os
-import socket
-import sqlite3
-import threading
-import time
 
+import json, os, socket, sqlite3, threading, time
 import pytest
 from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
-
-# Safe: root conftest.py already set the env vars before any app import.
 from shared import config, db
 from web import create_web_app
 
-# ============================================================================
-# Row selectors / helpers (imported by the test modules)
-# ============================================================================
-ROW = "tr[data-paper-id]"
+# ── row selectors ──────────────────────────────────────────────────────
+ROW         = "tr[data-paper-id]"
 VISIBLE_ROW = f"{ROW}:not(.filter-hidden)"
 
-# Live URL uses wide server-side filters so ALL six seed papers are served;
-# anything narrower is done client-side by the tests themselves.
-LIVE_PARAMS = "hide_offtopic=1&year_from=2000&year_to=2035&min_page_count=0"
+LIVE_PARAMS   = "hide_offtopic=1&year_from=2000&year_to=2035&min_page_count=0"
 EXPORT_PARAMS = "download=0&hide_offtopic=1&year_from=2000&year_to=2035&min_page_count=0"
-
 ON_TOPIC = ["p1", "p2", "p4", "p5", "p6"]
 ALL_PAPERS = ["p1", "p2", "p3", "p4", "p5", "p6"]
 
-# Server query orders papers WITH a user_trace first, then insertion order.
-INITIAL_DOM_ORDER = ["p4", "p1", "p2", "p5", "p6"]
 # Corrected expectations based on actual UI rendering (conflict = ⚠️, not ✔️)
 TRI_ONLY_TRUE = {"test_tri": {"p1", "p5"},          # p2 is conflict (⚠️), so hidden in only_true
                  "test_survey": {"p2", "p6"}}
@@ -88,32 +74,33 @@ EXPECTED_ASC = {
     "technique.method_x":  ["p2", "p4", "p6", "p1", "p5"],  # ❌x3 (id), ✔️x2 (id)
 }
 
+
+# ── helpers ────────────────────────────────────────────────────────────
 def visible_ids(page):
-    """Visible paper IDs in DOM order."""
+    """Paper IDs of rows the user can see (not hidden by filters)."""
     return page.eval_on_selector_all(
         VISIBLE_ROW,
-        "rows => rows.map(r => r.getAttribute('data-paper-id'))"
+        "rows => rows.map(r => r.getAttribute('data-paper-id'))",
     )
-
 
 def goto_live(page, app_server):
     page.goto(f"{app_server}/?{LIVE_PARAMS}")
     page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(900)
-
+    # Wait for the SPA pipeline: fetch → papersStore.load → render
+    page.wait_for_selector(f"{ROW}:not(.filter-hidden)", timeout=15_000)
+    page.wait_for_timeout(600)
 
 def goto_export(page, app_server, hide_offtopic=1):
     params = EXPORT_PARAMS.replace("hide_offtopic=1", f"hide_offtopic={hide_offtopic}")
     page.goto(f"{app_server}/static_export?{params}")
     page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(900)
-
+    page.wait_for_selector(f"{ROW}:not(.filter-hidden)", timeout=15_000)
+    page.wait_for_timeout(600)
 
 def cycle_tri(page, group):
     """JS click: bypasses headless Chromium's transformed-checkbox click bug."""
     page.locator(f".tri-state-checkbox[data-filter-group='{group}']").evaluate("el => el.click()")
     page.wait_for_timeout(600)
-
 
 def set_inclusion(page, group, checked):
     """Reliably emulate a user toggling a custom-styled inclusion checkbox."""
@@ -129,6 +116,21 @@ def set_inclusion(page, group, checked):
     )
     page.wait_for_timeout(600)
 
+def expand_detail(page, paper_id):
+    """Expand the detail row and wait until the form is interactive."""
+    btn = page.locator(f"tr[data-paper-id='{paper_id}'] .toggle-btn:not(.history-btn)")
+    btn.scroll_into_view_if_needed()
+    btn.click()
+    form = page.locator(f"form[data-paper-id='{paper_id}']")
+    form.wait_for(state="visible", timeout=10_000)
+    return form
+
+def expand_history(page, paper_id):
+    """Expand the history row and wait until content is rendered."""
+    btn = page.locator(f"tr[data-paper-id='{paper_id}'] .history-btn")
+    btn.scroll_into_view_if_needed()
+    btn.click()
+    page.wait_for_timeout(800)
 
 # ============================================================================
 # Session DB / server fixtures

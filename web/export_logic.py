@@ -232,10 +232,6 @@ def generate_html_export_content(papers, hide_offtopic, year_from_value, year_to
     stats_domain_js = read_static('js/stats/stats_domain.js')
     stats_latex_js = read_static('js/stats/stats_latex.js')
 
-    # --- Comms modules (needed for toggleDetails/toggleHistory in export) ---
-    comms_rendering_js = read_static('js/comms/comms_rendering.js')
-    comms_views_js = read_static('js/comms/comms_views.js')
-
     # --- Filtering modules ---
     filtering_js = (
         read_static('js/filtering/filtering_state.js') + '\n' +
@@ -250,8 +246,7 @@ def generate_html_export_content(papers, hide_offtopic, year_from_value, year_to
     for var in ['chart_js_content', 'chart_js_datalabels_content', 'd3_js_content',
                 'd3_cloud_js_content', 'stats_core_js', 'stats_generic_js',
                 'stats_charts_js', 'stats_domain_js', 'stats_latex_js',
-                'core_js', 'export_renderers_js', 'comms_rendering_js',
-                'comms_views_js', 'filtering_js', 'ghpages_js']:
+                'core_js', 'export_renderers_js', 'filtering_js', 'ghpages_js']:
         locals()[var] = rjsmin.jsmin(locals()[var])
 
     # Build slim papers JSON for embedding
@@ -268,6 +263,8 @@ def generate_html_export_content(papers, hide_offtopic, year_from_value, year_to
             'page_count': p.get('page_count'),
             'doi': p.get('doi'),
             'issn': p.get('issn'),
+            'volume': p.get('volume'),        # ADD
+            'month': p.get('month'),          # ADD
             'abstract': p.get('abstract') if not skip_abstracts else None,
             'keywords': p.get('keywords'),
             'deannualized_conference': p.get('deannualized_conference'),
@@ -317,8 +314,6 @@ def generate_html_export_content(papers, hide_offtopic, year_from_value, year_to
         d3_cloud_js_content=Markup(d3_cloud_js_content),
         core_js=Markup(core_js),
         export_renderers_js=Markup(export_renderers_js),
-        comms_rendering_js=Markup(comms_rendering_js),
-        comms_views_js=Markup(comms_views_js),
         stats_core_js=Markup(stats_core_js),
         stats_generic_js=Markup(stats_generic_js),
         stats_charts_js=Markup(stats_charts_js),

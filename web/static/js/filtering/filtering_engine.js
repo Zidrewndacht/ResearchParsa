@@ -21,7 +21,7 @@ function getFilterState() {
     };
 }
 
-function applyLocalFilters() {
+function applyLocalFilters(onComplete) {
     // Cancel any ongoing filter operation
     if (currentFilterAbortController) currentFilterAbortController.abort();
 
@@ -46,19 +46,18 @@ function applyLocalFilters() {
 
         rafId = requestAnimationFrame(() => {
             if (signal.aborted) return;
-
             virtualScroll.reset();
+            virtualScroll.prepareDuplicateData();
             updateUrlWithClientFilters();
             updateCounts();
             restoreDetailState();
-
             if (document.body.id !== 'html-export') {
                 const applyButton = document.getElementById('apply-serverside-filters');
                 if (applyButton) { applyButton.style.opacity = '0'; applyButton.style.pointerEvents = 'none'; }
             }
-
             document.documentElement.classList.remove('busyCursor');
             if (currentFilterAbortController?.signal === signal) currentFilterAbortController = null;
+            if (typeof onComplete === 'function') onComplete();   // ← ADD
         });
     }, FILTER_DEBOUNCE_DELAY);
 }
@@ -77,6 +76,7 @@ function performSort(sortBy, direction) {
     }
 
     virtualScroll.reset();
+    virtualScroll.prepareDuplicateData();   // ← ADD
     updateUrlWithClientFilters();
     updateCounts();
 }

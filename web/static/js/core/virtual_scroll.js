@@ -7,7 +7,7 @@
  */
 const virtualScroll = (() => {
     const ROW_HEIGHT = 58;       // estimated collapsed height per paper-group (px)
-    const BUFFER = 100;           // extra paper-groups rendered above/below viewport
+    const BUFFER = 40;          // extra paper-groups rendered above/below viewport
     let scrollContainer = null;
     let tbody = null;
     let spacerTop = null;
@@ -120,7 +120,10 @@ const virtualScroll = (() => {
         renderedEnd = newEnd;
 
         // Duplicate shading (cheap, only touches rendered rows)
-        if (!isExport) _applyDuplicateShading();
+        _applyDuplicateShading();
+
+        // Restore expanded detail/history rows that were re-created after scrolling
+        if (typeof restoreDetailState === 'function') restoreDetailState();
     }
 
     // --- Row creation with deterministic shading ---
@@ -212,40 +215,46 @@ const virtualScroll = (() => {
         return str.replace(/([^\w-])/g, '\\$1');
     }
 
-    // --- Duplicate shading (only rendered rows) ---
-    function _applyDuplicateShading() {
-        const rows = tbody.querySelectorAll('tr[data-paper-id]');
-        const journalCounts = new Map();
-        const titleCounts = new Map();
+    // --- Module-level cache (add near top of the IIFE, after existing lets) ---
+    let _dupJournalCounts = new Map();
+    let _dupTitleCounts = new Map();
+    let _dupJournalHsl = new Map();
+    let _dupTitleHsl = '';
+    let _dupTitleCount = 0;
 
-        for (const row of rows) {
-            const jCell = row.cells[journalCellIndex];
-            const tCell = row.cells[titleCellIndex];
-            const jTxt = jCell ? jCell.textContent.trim().toLowerCase() : '';
-            const tTxt = tCell ? tCell.textContent.trim().toLowerCase() : '';
-            if (jTxt) journalCounts.set(jTxt, (journalCounts.get(jTxt) || 0) + 1);
-            if (tTxt) titleCounts.set(tTxt, (titleCounts.get(tTxt) || 0) + 1);
+    // --- Called from filtering_engine.js after filters/sort change ---
+    function prepareDuplicateData() {
+        const papers = papersStore.getFiltered();
+        _dupJournalCounts = new Map();
+        _dupTitleCounts = new Map();
+        for (const p of papers) {
+            const jTxt = (p.deannualized_conference || p.journal || '').trim().toLowerCase();
+            const tTxt = (p.title || '').trim().toLowerCase();
+            if (jTxt) _dupJournalCounts.set(jTxt, (_dupJournalCounts.get(jTxt) || 0) + 1);
+            if (tTxt) _dupTitleCounts.set(tTxt, (_dupTitleCounts.get(tTxt) || 0) + 1);
         }
-
-        let dupTitleCount = 0;
-        for (const [, count] of titleCounts) { if (count >= 2) dupTitleCount++; }
-        if (duplicateCountElement) duplicateCountElement.textContent = dupTitleCount;
+        _dupTitleCount = 0;
+        for (const [, count] of _dupTitleCounts) { if (count >= 2) _dupTitleCount++; }
+        if (duplicateCountElement) duplicateCountElement.textContent = _dupTitleCount;
 
         let maxCount = 0;
-        for (const count of journalCounts.values()) { if (count > maxCount) maxCount = count; }
-
+        for (const count of _dupJournalCounts.values()) { if (count > maxCount) maxCount = count; }
         const baseJournalHue = 210, baseSaturation = 66, minLightness = 96, maxLightness = 84;
-        const journalHsl = new Map();
-        for (const [name, count] of journalCounts) {
+        _dupJournalHsl = new Map();
+        for (const [name, count] of _dupJournalCounts) {
             if (count >= 2) {
                 let lightness = maxCount <= 1 ? minLightness
                     : maxLightness + (minLightness - maxLightness) * (1 - (count - 1) / (maxCount - 1));
                 lightness = Math.max(maxLightness, Math.min(minLightness, lightness));
-                journalHsl.set(name, `hsl(${baseJournalHue}, ${baseSaturation}%, ${lightness}%)`);
+                _dupJournalHsl.set(name, `hsl(${baseJournalHue}, ${baseSaturation}%, ${lightness}%)`);
             }
         }
-        const dupTitleHsl = `hsl(0, 66%, 94%)`;
+        _dupTitleHsl = `hsl(0, 66%, 94%)`;
+    }
 
+    // --- Called from update(); only touches rendered rows ---
+    function _applyDuplicateShading() {
+        const rows = tbody.querySelectorAll('tr[data-paper-id]');
         for (const row of rows) {
             const jCell = row.cells[journalCellIndex];
             const tCell = row.cells[titleCellIndex];
@@ -253,10 +262,10 @@ const virtualScroll = (() => {
             if (tCell) tCell.style.backgroundColor = '';
             const jTxt = jCell ? jCell.textContent.trim().toLowerCase() : '';
             const tTxt = tCell ? tCell.textContent.trim().toLowerCase() : '';
-            if (jTxt && journalCounts.get(jTxt) >= 2) jCell.style.backgroundColor = journalHsl.get(jTxt);
-            if (tTxt && titleCounts.get(tTxt) >= 2) tCell.style.backgroundColor = dupTitleHsl;
+            if (jTxt && _dupJournalCounts.get(jTxt) >= 2) jCell.style.backgroundColor = _dupJournalHsl.get(jTxt);
+            if (tTxt && _dupTitleCounts.get(tTxt) >= 2) tCell.style.backgroundColor = _dupTitleHsl;
         }
     }
 
-    return { init, update, reset, refresh, getRenderedRange, ensurePaperVisible };
+    return { init, update, reset, refresh, getRenderedRange, ensurePaperVisible, prepareDuplicateData };
 })();

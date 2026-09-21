@@ -315,7 +315,7 @@ const exportRenderers = (() => {
         try {
             const dt = new Date(ts.replace('Z', '+00:00'));
             const pad = n => String(n).padStart(2, '0');
-            return `${pad(dt.getDate())}/${pad(dt.getMonth() + 1)}/${String(dt.getFullYear()).slice(2)} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
+            return `${pad(dt.getUTCDate())}/${pad(dt.getUTCMonth() + 1)}/${String(dt.getUTCFullYear()).slice(2)} ${pad(dt.getUTCHours())}:${pad(dt.getUTCMinutes())}:${pad(dt.getUTCSeconds())}`;
         } catch { return ts; }
     }
 
@@ -324,24 +324,62 @@ const exportRenderers = (() => {
     function _generateBibtex(paper) {
         const type = (paper.type || 'misc').toLowerCase();
         const key = paper.id;
+
+        const typeRequiredFields = {
+            'article':       ['title', 'author', 'journal', 'year'],
+            'inproceedings': ['title', 'author', 'booktitle', 'year'],
+            'conference':    ['title', 'author', 'booktitle', 'year'],
+            'book':          ['title', 'author', 'publisher', 'year'],
+            'inbook':        ['title', 'author', 'chapter', 'publisher', 'year'],
+            'incollection':  ['title', 'author', 'booktitle', 'publisher', 'year'],
+            'techreport':    ['title', 'author', 'institution', 'year'],
+            'phdthesis':     ['title', 'author', 'school', 'year'],
+            'mastersthesis': ['title', 'author', 'school', 'year'],
+            'manual':        ['title'],
+            'misc':          ['title', 'author', 'year'],
+        };
+        const relevantFields = typeRequiredFields[type] || ['title', 'author', 'year'];
+
+        const authorsFormatted = paper.authors
+            ? paper.authors.split(';').map(a => a.trim()).join(' and ')
+            : null;
+        const keywordsFormatted = paper.keywords
+            ? paper.keywords.split(';').map(k => k.trim()).join(', ')
+            : null;
+        let pagesFormatted = paper.pages || null;
+        if (pagesFormatted) pagesFormatted = pagesFormatted.replace(/\s*[-\u2013\u2014]\s*/g, '--');
+
+        const fieldMapping = {
+            'title': paper.title || null,
+            'author': authorsFormatted,
+            'year': paper.year != null ? String(paper.year) : null,
+            'journal': paper.journal || null,
+            'booktitle': paper.journal || null,
+            'volume': paper.volume || null,
+            'pages': pagesFormatted,
+            'doi': paper.doi || null,
+            'issn': paper.issn || null,
+            'month': paper.month || null,
+            'keywords': keywordsFormatted,
+        };
+
         const lines = [`@${type}{${key},`];
-        if (paper.title) lines.push(`  title = {${paper.title}},`);
-        if (paper.authors) {
-            const authorsFormatted = paper.authors.split(';').map(a => a.trim()).join(' and ');
-            lines.push(`  author = {${authorsFormatted}},`);
+
+        for (const field of relevantFields) {
+            const value = fieldMapping[field];
+            if (value != null && String(value).trim() !== '') {
+                lines.push(`  ${field} = {${value}},`);
+            }
         }
-        if (paper.year) lines.push(`  year = {${paper.year}},`);
-        if (paper.journal) {
-            if (type === 'inproceedings' || type === 'conference') lines.push(`  booktitle = {${paper.journal}},`);
-            else lines.push(`  journal = {${paper.journal}},`);
+
+        const otherFields = ['volume', 'pages', 'doi', 'issn', 'month', 'keywords'];
+        for (const field of otherFields) {
+            const value = fieldMapping[field];
+            if (value != null && String(value).trim() !== '' && !relevantFields.includes(field)) {
+                lines.push(`  ${field} = {${value}},`);
+            }
         }
-        if (paper.pages) lines.push(`  pages = {${paper.pages.replace(/\s*[-–—]\s*/, '--')}},`);
-        if (paper.doi) lines.push(`  doi = {${paper.doi}},`);
-        if (paper.issn) lines.push(`  issn = {${paper.issn}},`);
-        if (paper.keywords) {
-            const kw = paper.keywords.split(';').map(k => k.trim()).join(', ');
-            lines.push(`  keywords = {${kw}},`);
-        }
+
         if (lines.length > 1) lines[lines.length - 1] = lines[lines.length - 1].replace(/,$/, '');
         lines.push('}');
         return lines.join('\n');

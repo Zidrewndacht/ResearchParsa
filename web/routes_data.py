@@ -57,6 +57,8 @@ def api_papers():
             'page_count': p.get('page_count'),
             'doi': p.get('doi'),
             'issn': p.get('issn'),
+            'volume': p.get('volume'),        # ADD
+            'month': p.get('month'),          # ADD
             'abstract': p.get('abstract'),
             'keywords': p.get('keywords'),
             'deannualized_conference': p.get('deannualized_conference'),

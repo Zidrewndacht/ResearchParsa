@@ -69,10 +69,10 @@ function updateCounts() {
 
         APP_CONFIG.groups.forEach(group => {
             if (group.filter_type === 'tri_state') {
-                if (tableRenderer.getBool(c, group.json_path) === true) counts[group.json_path]++;
+                if (papersStore.fieldIsTrue(c, paper.main_certainty, group.json_path)) counts[group.json_path]++;
             } else if (['inclusion', 'none'].includes(group.filter_type)) {
                 group.fields.forEach(f => {
-                    if (tableRenderer.getBool(c, `${group.json_path}.${f.key}`) === true) counts[`${group.json_path}.${f.key}`]++;
+                    if (papersStore.fieldIsTrue(c, paper.main_certainty, `${group.json_path}.${f.key}`)) counts[`${group.json_path}.${f.key}`]++;
                 });
             }
         });
@@ -84,7 +84,7 @@ function updateCounts() {
         if (year && !isNaN(year)) {
             if (!yearlySurveyImpl[year]) yearlySurveyImpl[year] = { surveys: 0, impl: 0 };
             if (!yearlyPubTypes[year]) yearlyPubTypes[year] = {};
-            const isSurvey = tableRenderer.getBool(c, 'is_survey') === true;
+            const isSurvey = papersStore.fieldIsTrue(c, paper.main_certainty, 'is_survey');
             isSurvey ? yearlySurveyImpl[year].surveys++ : yearlySurveyImpl[year].impl++;
             const rawType = (paper.type || '').toLowerCase();
             if (rawType) {
