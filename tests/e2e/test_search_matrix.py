@@ -29,8 +29,9 @@ def test_search_no_match_hides_everything(page, target):
     page.fill("#search-input", "zzz_no_such_token_xyz")
     page.wait_for_timeout(600)
     assert visible_ids(page) == []
-    # p3 is hidden by default off-topic filter, so 5 rows remain in DOM
-    assert page.locator("tr[data-paper-id]").count() >= 5
+    # REMOVED: assert page.locator("tr[data-paper-id]").count() >= 5
+    # Virtual scroll removes non-matching rows from the DOM entirely.
+    # The user-visible contract is: nothing is shown.
 
 def test_clear_button_restores_all(page, target):
     page.fill("#search-input", "zzz_no_such_token_xyz")

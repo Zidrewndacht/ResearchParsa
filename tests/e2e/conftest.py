@@ -39,15 +39,13 @@ TRI_ONLY_FALSEISH = {"test_tri": {"p2", "p4", "p6"}, # keeps ❌, ❔, AND ⚠�
                      "test_survey": {"p1", "p4", "p5"}}
 
 # Expected ASC order per data-sort key, for the default visible set ON_TOPIC.
-# DESC is always the exact reverse (total order: value, then paper id; the
-# DESC branch negates the whole comparator, reversing tiebreaks as well).
+# Tiebreaker: year DESC → title ASC → paper ID ASC (all negated by direction,
+# so DESC is always the exact reverse of ASC).
 EXPECTED_ASC = {
     # hardcoded leading columns
-    "pdf-link":            ["p4", "p2", "p6", "p1", "p5"], # Adjusted for JS emoji fallback weights
-    "title":               ["p2", "p6", "p5", "p1", "p4"],
-    # p2, p4, p6 are now 'article' (same as p1). p5 is 'phdthesis'.
-    # article < phdthesis alphabetically. Tiebreaker for articles is paperId ASC.
-    "type":                ["p1", "p2", "p4", "p6", "p5"],
+    "pdf-link":            ["p4", "p2", "p6", "p1", "p5"],  # 0,1,1,2,3 — p2/p6 tie broken by year (2023>2019)
+    "title":               ["p2", "p6", "p5", "p1", "p4"],  # all unique titles
+    "type":                ["p1", "p2", "p4", "p6", "p5"],  # articles tied → year DESC; p5 phdthesis last
     # numeric / numeric-ish
     "year":                ["p6", "p4", "p2", "p1", "p5"],  # 2019 2021 2023 2024 2025
     "page_count":          ["p2", "p5", "p1", "p4", "p6"],  # 6 8 10 12 15
@@ -55,23 +53,23 @@ EXPECTED_ASC = {
     "user_override_count": ["p5", "p1", "p2", "p4", "p6"],  # 0 1 2 3 4
     "relevance":           ["p6", "p5", "p2", "p4", "p1"],  # 4 6 7 8 9
     # string columns
-    "journal":             ["p5", "p1", "p6", "p2", "p4"],  # CVPR, IEEE x2 (id tiebreak), J Manuf, Nature Prod
-    # date column (dd/mm/yy HH:MM:SS parsing)
+    "journal":             ["p5", "p1", "p6", "p2", "p4"],  # CVPR, IEEE×2 (year tiebreak), J Manuf, Nature Prod
+    # date column
     "changed":             ["p6", "p1", "p2", "p4", "p5"],
     # emoji-span weight columns (👤2 > ❔1 > 🖥️0)
-    "changed_by":          ["p2", "p6", "p4", "p1", "p5"],
+    "changed_by":          ["p2", "p6", "p4", "p5", "p1"],  # p5(2025) before p1(2024) in the weight-2 group
     "verified_by":         ["p1", "p2", "p4", "p6", "p5"],
     # symbol weight column (✔️2 > ❌1 > ❔0)
-    "user_comment_state":  ["p1", "p2", "p5", "p6", "p4"],
+    "user_comment_state":  ["p5", "p1", "p2", "p6", "p4"],  # 0-group: year DESC; p4=2 last
     # editable-status / certainty-aware dynamic columns
-    "is_offtopic":         ["p1", "p2", "p4", "p5", "p6"],  # all tied (❌ solid) -> pure id order
+    "is_offtopic":         ["p5", "p1", "p2", "p4", "p6"],  # all tied (❌ solid) → year DESC
     "is_test_bool":        ["p6", "p4", "p2", "p5", "p1"],  # 0, 2, 3.25(conflict), 3.75(✔️80), 4
-    "is_survey":           ["p1", "p4", "p5", "p6", "p2"],  # 0,0, 2, 3.75(✔️80), 4
-    "verified":            ["p2", "p5", "p6", "p4", "p1"],  # 0,0,0, 2, 4
+    "is_survey":           ["p1", "p4", "p5", "p6", "p2"],  # p1/p4 tied at 0 → year DESC
+    "verified":            ["p5", "p2", "p6", "p4", "p1"],  # 0-group: year DESC (p5>p2>p6)
     # Corrected: p5, p6 are missing (❔=0), p4 is False (❌=1), p1, p2 are True (✔️=2)
     "features.feat_a":     ["p5", "p6", "p4", "p1", "p2"],
-    "methods.appr_p":      ["p2", "p4", "p5", "p6", "p1"],  # only p1 is ✔️
-    "technique.method_x":  ["p2", "p4", "p6", "p1", "p5"],  # ❌x3 (id), ✔️x2 (id)
+    "methods.appr_p":      ["p5", "p2", "p4", "p6", "p1"],  # 0-group: year DESC; only p1 is ✔️
+    "technique.method_x":  ["p2", "p4", "p6", "p5", "p1"],  # ❌×3 (year), ✔️×2 → p5(2025) before p1(2024)
 }
 
 
@@ -86,8 +84,8 @@ def visible_ids(page):
 def goto_live(page, app_server):
     page.goto(f"{app_server}/?{LIVE_PARAMS}")
     page.wait_for_load_state("networkidle")
-    # Wait for the SPA pipeline: fetch → papersStore.load → render
     page.wait_for_selector(f"{ROW}:not(.filter-hidden)", timeout=15_000)
+    # Let the SPA settle after initial render + filter pass
     page.wait_for_timeout(600)
 
 def goto_export(page, app_server, hide_offtopic=1):
@@ -311,13 +309,23 @@ def _seed_into(db_path):
     conn.commit()
     conn.close()
 
+# tests/e2e/conftest.py
+import shutil
+from shared import config as app_config
 
 @pytest.fixture(autouse=True)
-def reset_seed_data(e2e_db_path, app_server):
-    """Janitor: resets the DB to the pristine seed state before EVERY test."""
+def reset_test_environment(e2e_db_path, app_server):
+    """Janitor: resets the DB and filesystem to the pristine seed state before EVERY test."""
+    # 1. Reset DB
     _seed_into(e2e_db_path)
+    
+    # 2. Reset Filesystem (PDFs) - Guarantees absolute test isolation
+    for d in [app_config.PDF_STORAGE_DIR, app_config.ANNOTATED_PDF_STORAGE_DIR]:
+        if os.path.exists(d):
+            shutil.rmtree(d, ignore_errors=True)
+        os.makedirs(d, exist_ok=True)
+        
     yield
-
 
 @pytest.fixture(autouse=True)
 def reset_browser_state(page, app_server):

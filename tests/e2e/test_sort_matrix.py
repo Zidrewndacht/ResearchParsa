@@ -10,46 +10,21 @@ SORT_COLUMNS = list(EXPECTED_ASC.keys())
 @pytest.mark.parametrize("sort_key", SORT_COLUMNS)
 def test_sort_desc_then_asc(page, target, sort_key):
     header = page.locator(f"th[data-sort='{sort_key}']")
-
-    # First click: DESC
     header.click()
     page.wait_for_timeout(600)
     desc_got = visible_ids(page)
-
-    # Second click: ASC
     header.click()
     page.wait_for_timeout(600)
     asc_got = visible_ids(page)
-
     expected_asc = EXPECTED_ASC[sort_key]
-    
-    # In the static export, 'none' PDF state renders as empty string (weight 0),
-    # identical to 'paywalled' (💰, weight 0). Thus p2, p4, and p6 all tie at 
-    # weight 0 and fall back to the paper ID tiebreaker (p2 < p4 < p6).
-    if sort_key == 'pdf-link' and target == 'export':
-        expected_asc = ['p2', 'p4', 'p6', 'p1', 'p5']
-    
+    # REMOVED: the export pdf-link special case.
+    # Unified weights make live and export identical.
     assert asc_got == expected_asc, \
         f"{sort_key} ASC: got {asc_got}, want {expected_asc}"
-    
-    # DESC must be the exact reverse of the observed ASC
     assert desc_got == list(reversed(asc_got)), \
         f"{sort_key} DESC: got {desc_got}, want {list(reversed(asc_got))}"
-
     indicator = header.locator(".sort-indicator").text_content()
     assert indicator == "▲", f"ASC should show ▲, got '{indicator}'"
-
-
-@pytest.mark.parametrize("sort_key", ["journal", "pdf-link", "changed_by"])
-def test_desc_reverses_tiebreaks_too(page, target, sort_key):
-    header = page.locator(f"th[data-sort='{sort_key}']")
-    header.click()
-    page.wait_for_timeout(600)
-    desc_got = visible_ids(page)
-    header.click()
-    page.wait_for_timeout(600)
-    asc_got = visible_ids(page)
-    assert desc_got == list(reversed(asc_got))
 
 def test_sort_state_persisted_in_url_and_restored(page, target):
     page.locator("th[data-sort='year']").click()
@@ -90,17 +65,13 @@ def test_alternating_shading_reapplied_after_sort(page, target):
 
 def test_duplicate_journal_shading(page, target):
     """p1 and p6 share 'IEEE Trans' -> both journal cells get shaded."""
-    # The JS intentionally disables duplicate shading in the static HTML export 
-    # to keep the standalone file lightweight.
-    if target == "export":
-        pytest.skip("Duplicate shading disabled in static HTML export.")
-
-    # Wait for the duplicate shading JS to run (it runs after filter debounce)
+    # Ensure the rows are rendered (virtual scroll may delay them)
+    page.wait_for_selector("tr[data-paper-id='p1']", timeout=10000)
+    page.wait_for_selector("tr[data-paper-id='p6']", timeout=10000)
     page.wait_for_function("""() => {
         const p1 = document.querySelector("tr[data-paper-id='p1']");
         return p1 && p1.cells[4] && p1.cells[4].style.backgroundColor !== '';
-    }""", timeout=5000)
-    
+    }""", timeout=10000)
     shaded = page.eval_on_selector_all(
         "tr[data-paper-id]:not(.filter-hidden)",
         """rows => rows.filter(r => {

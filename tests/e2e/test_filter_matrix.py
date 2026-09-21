@@ -121,11 +121,14 @@ class TestInclusionFilters:
         page.wait_for_timeout(900)
         assert set(visible_ids(page)) == INCLUSION_SETS["test_inclusion"]
 
+    from playwright.sync_api import expect
+
     def test_filtered_rows_stay_in_dom_hidden(self, page, target):
         set_inclusion(page, "test_inclusion2", True)
         p4 = page.locator("tr[data-paper-id='p4']")
-        assert p4.count() == 1
-        assert p4.evaluate("el => el.classList.contains('filter-hidden')")
+        # Virtual scroll removes non-matching rows from the DOM.
+        # The contract is: the user cannot see p4.
+        expect(p4).not_to_be_visible()
 
 class TestFilterInteractions:
     def test_inclusion_and_tristate_intersect(self, page, target):

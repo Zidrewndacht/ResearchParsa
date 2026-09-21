@@ -88,6 +88,7 @@ const exportRenderers = (() => {
 
     function renderHistoryContent(paper) {
         const esc = tableRenderer.esc;
+        //Why are those created and never used?
         const renderStatus = tableRenderer.renderStatus;
         const renderChangedBy = tableRenderer.renderChangedBy;
         const renderVerifiedBy = tableRenderer.renderVerifiedBy;
@@ -171,7 +172,7 @@ const exportRenderers = (() => {
             }
 
             const ns_total = _countDynamicCols();
-            const historyTableWidth = 378 + ns_total * 27;
+            const historyTableWidth = 378 + ns_total * 27;  //why is that unused?
 
             panelsHtml += `
             <div class="history-tab-panel${activeClass}" data-tab-panel="${ls.tab}" data-paper-id="${esc(paper.id)}">

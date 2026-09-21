@@ -107,15 +107,31 @@ const papersStore = (() => {
     }
 
     // --- Sorting ---
-    // Pure comparator factory. Returns a comparison function.
+    //what is that? not used anywhere?
+    function _compareValues(va, vb) {
+        if (va instanceof Date && vb instanceof Date) {
+            if (isNaN(va) && isNaN(vb)) return 0;
+            if (isNaN(va)) return 1;
+            if (isNaN(vb)) return -1;
+            return va - vb;
+        }
+        if (typeof va === 'string' && typeof vb === 'string') {
+            // numeric: true ensures "p2" < "p10"
+            return va.localeCompare(vb, undefined, { sensitivity: 'base', numeric: true });
+        }
+        if (va > vb) return 1;
+        if (va < vb) return -1;
+        return 0;
+    }
+
+    // papers_store.js — makeComparator
     function makeComparator(sortBy, direction) {
         const dir = direction === 'DESC' ? -1 : 1;
-
         return (a, b) => {
+            let cmp = 0;
+            // --- primary comparison (unchanged) ---
             let va = _extractSortValue(a, sortBy);
             let vb = _extractSortValue(b, sortBy);
-            let cmp = 0;
-
             if (va instanceof Date && vb instanceof Date) {
                 if (isNaN(va)) cmp = isNaN(vb) ? 0 : 1;
                 else if (isNaN(vb)) cmp = -1;
@@ -126,13 +142,22 @@ const papersStore = (() => {
                 if (va > vb) cmp = 1;
                 else if (va < vb) cmp = -1;
             }
-
+            // --- tiebreakers: INSIDE, so they get negated by dir too ---
+            if (cmp === 0) {
+                const ya = a.year || 0, yb = b.year || 0;
+                if (ya !== yb) cmp = ya > yb ? 1 : -1;       // year DESC in ASC mode
+            }
+            if (cmp === 0) {
+                const ta = (a.title || '').toLowerCase();
+                const tb = (b.title || '').toLowerCase();
+                cmp = ta.localeCompare(tb, undefined, { sensitivity: 'base' });
+            }
             if (cmp === 0) {
                 const ia = String(a.id), ib = String(b.id);
                 if (ia > ib) cmp = 1;
                 else if (ia < ib) cmp = -1;
             }
-            return cmp * dir;
+            return cmp * dir;   // ← everything gets negated, DESC = exact reverse
         };
     }
 
@@ -262,8 +287,8 @@ const papersStore = (() => {
                 const st = paper.pdf_state;
                 if (st === 'annotated') return 3;
                 if (st === 'PDF') return 2;
-                if (st === 'none') return 1;
-                return 0; // paywalled
+                if (st === 'paywalled') return 1; // <-- Swapped
+                return 0; // none / unknown        // <-- Swapped
             }
             case 'verified_by': {
                 const vb = paper.verified_by;
