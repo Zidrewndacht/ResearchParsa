@@ -1812,3 +1812,29 @@ tr.focus-highlight > td {
     width: 180px
 }
 
+/* ==========================================================================
+   Direction-aware sticky header.
+   Collapsed == today's state: every thead cell pinned at top:0, overlapping
+   per z-index/DOM order (hides row 1 AND #inferred-header-title).
+   Expanded == natural row order reproduced while pinned, via cumulative
+   offsets measured at boot. At scrollTop 0 nothing is pinned, so the top of
+   the table is pixel-identical to today. Works in the static export too:
+   there row 1 is display:none -> measures 0px -> offsets collapse to
+   0/H2/H2+H3, which is exactly what that implementation needs.
+   ========================================================================== */
+.table-container thead tr:nth-child(1) th { top: 0; }
+.table-container thead tr:nth-child(2) th { top: var(--pin2, 0px); }
+.table-container thead tr:nth-child(3) th { top: var(--pin3, 0px); }
+.table-container thead tr:nth-child(4) th { top: var(--pin4, 0px); }
+
+.table-container.header-expanded {
+    --pin2: var(--hdr-h1, 0px);
+    --pin3: calc(var(--hdr-h1, 0px) + var(--hdr-h2, 0px));
+    --pin4: calc(var(--hdr-h1, 0px) + var(--hdr-h2, 0px) + var(--hdr-h3, 0px));
+}
+.table-container:not(.header-expanded) {
+    --pin2: 0px; --pin3: 0px; --pin4: 0px;
+}
+
+/* Same slide feel as the existing collapse/expand; only `top` animates. */
+.table-container thead th { transition: top .15s ease-in-out; }

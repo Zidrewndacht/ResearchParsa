@@ -96,9 +96,9 @@ function updateTableRowWithPDFData(paperId, filename, pdfState) {
     pdfCell.title = "PDF Status";
 
     if (filename && (pdfState === 'PDF' || pdfState === 'annotated')) {
-        const filenameWithoutExtension = filename.replace(/\.pdf$/i, '');
         const pdfLink = document.createElement('a');
-        pdfLink.href = `/static/pdfjs/web/viewer.html?file=/serve_pdf/${encodeURIComponent(filenameWithoutExtension)}`;
+        // FIX: Use paperId instead of filenameWithoutExtension
+        pdfLink.href = `/static/pdfjs/web/viewer.html?file=/serve_pdf/${encodeURIComponent(paperId)}`;
         pdfLink.target = '_blank';
         pdfLink.title = pdfState === 'annotated'
             ? 'Open this annotated PDF in the Annotator'

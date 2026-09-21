@@ -174,7 +174,7 @@ function saveChanges(paperId) {
                             if (data.pdf_filename) {
                                 const extRemoved = data.pdf_filename.replace(/\.pdf$/i, '');
                                 const pdfLink = document.createElement('a');
-                                pdfLink.href = `/static/pdfjs/web/viewer.html?file=/serve_pdf/${encodeURIComponent(extRemoved)}`;
+                                pdfLink.href = `/static/pdfjs/web/viewer.html?file=/serve_pdf/${encodeURIComponent(paperId)}`;
                                 pdfLink.target = '_blank';
                                 pdfLink.className = 'pdf-link';
                                 pdfLink.textContent = data.pdf_state === 'annotated' ? '📗' : '📕';

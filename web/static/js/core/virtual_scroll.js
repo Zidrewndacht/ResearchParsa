@@ -17,6 +17,36 @@ const virtualScroll = (() => {
     let totalCols = 0;
     let rafPending = false;
 
+    let _lastScrollTop = 0;
+    let _headerExpanded = false;
+
+    /* Measure the three natural row heights once; row 1 is 0px in the export. */
+    function _measureHeaderRows() {
+        const rows = document.querySelectorAll('#papersTable thead tr');
+        if (!rows.length || !scrollContainer) return;
+        scrollContainer.style.setProperty('--hdr-h1', (rows[0].offsetHeight || 0) + 'px');
+        scrollContainer.style.setProperty('--hdr-h2', (rows[1].offsetHeight || 0) + 'px');
+        scrollContainer.style.setProperty('--hdr-h3', (rows[2].offsetHeight || 0) + 'px');
+    }
+
+    function _updateHeaderState(scrollTop) {
+        if (scrollTop <= 0) {          // top of table: pure natural layout, as today
+            _lastScrollTop = scrollTop;
+            _setHeaderExpanded(false);
+            return;
+        }
+        const delta = scrollTop - _lastScrollTop;
+        _lastScrollTop = scrollTop;
+        if (delta > 0) _setHeaderExpanded(false);   // one step down  -> collapse
+        else if (delta < 0) _setHeaderExpanded(true); // one step up -> expand
+    }
+
+    function _setHeaderExpanded(expanded) {
+        if (expanded === _headerExpanded) return;
+        _headerExpanded = expanded;
+        scrollContainer.classList.toggle('header-expanded', expanded);
+    }
+
     function init(container, tableBody, cols) {
         scrollContainer = container;
         tbody = tableBody;
@@ -26,6 +56,8 @@ const virtualScroll = (() => {
         tbody.appendChild(spacerTop);
         tbody.appendChild(spacerBottom);
         scrollContainer.addEventListener('scroll', _onScroll, { passive: true });
+        _measureHeaderRows();
+        window.addEventListener('resize', _measureHeaderRows);
     }
 
     function _makeSpacer() {
@@ -51,6 +83,7 @@ const virtualScroll = (() => {
     }
 
     function update() {
+        _updateHeaderState(scrollContainer.scrollTop);   // first line
         const papers = papersStore.getFiltered();
         const total = papers.length;
 
@@ -193,6 +226,8 @@ const virtualScroll = (() => {
         _clearAllRendered();
         renderedStart = -1;
         renderedEnd = -1;
+        scrollContainer.scrollTop = st; 
+        _lastScrollTop = st; 
         update();
         scrollContainer.scrollTop = st;
     }
@@ -202,6 +237,8 @@ const virtualScroll = (() => {
         const idx = papers.findIndex(p => String(p.id) === String(paperId));
         if (idx === -1) return null;
         scrollContainer.scrollTop = idx * ROW_HEIGHT;
+        scrollContainer.scrollTop = idx * ROW_HEIGHT; 
+        _lastScrollTop = scrollContainer.scrollTop; 
         update();
         return tbody.querySelector(`tr[data-paper-id="${_cssEscape(String(paperId))}"]`);
     }
