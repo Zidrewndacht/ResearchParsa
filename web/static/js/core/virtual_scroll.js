@@ -7,7 +7,7 @@
  */
 const virtualScroll = (() => {
     const ROW_HEIGHT = 58;       // estimated collapsed height per paper-group (px)
-    const BUFFER = 40;          // extra paper-groups rendered above/below viewport
+    const BUFFER = 4;          // extra paper-groups rendered above/below viewport
     let scrollContainer = null;
     let tbody = null;
     let spacerTop = null;
