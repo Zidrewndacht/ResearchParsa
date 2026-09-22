@@ -1895,15 +1895,3 @@ body.edit-locked .editable-status {
     pointer-events: none;
     cursor: default;
 }
-
-/* ==========================================================================
-   Preload skeleton rows: give the served (data-less) table the same
-   full-height shape as a populated one. Removed once real data renders.
-   ========================================================================== */
-tr.skeleton-row > td {
-    height: 58px;               /* matches virtualScroll ROW_HEIGHT */
-    padding: 0;
-}
-tr.skeleton-row:nth-child(even) {
-    background-color: var(--table-row-even);
-}
