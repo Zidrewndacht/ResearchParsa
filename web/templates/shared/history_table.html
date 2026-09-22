@@ -30,7 +30,7 @@
                     {% endif %}
                 {% else %}
                     {% if entry.trace %}
-                        <div class="log-trace"><pre>{% if is_lite_export %}Thinking trace unavailable in lite export{% else %}{{ entry.trace }}{% endif %}</pre></div>
+                        <div class="log-trace"><pre>{% if is_lite_export %}Thinking trace not included in this lite HTML export{% else %}{{ entry.trace }}{% endif %}</pre></div>
                     {% endif %}
                     {% if entry.verification_data %}
                         <div class="log-verification-summary">

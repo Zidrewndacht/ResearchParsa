@@ -19,6 +19,8 @@ const virtualScroll = (() => {
 
     let _lastScrollTop = 0;
     let _headerExpanded = false;
+    const UNCOLLAPSE_TOLERANCE = 120;   // px of sustained upward scroll before the header re-expands
+    let _scrollAccum = 0;
     
     /* Measure the three natural row heights once; row 1 is 0px in the export. */
     function _measureHeaderRows() {
@@ -30,26 +32,32 @@ const virtualScroll = (() => {
         scrollContainer.style.setProperty('--hdr-h4', (rows[3].offsetHeight || 0) + 'px');  // ← ADD
     }
 
+    function _setHeaderExpanded(expanded) {
+        if (expanded === _headerExpanded) return;
+        _headerExpanded = expanded;
+        scrollContainer.classList.toggle('header-expanded', expanded);
+    }
+
     function _updateHeaderState(scrollTop) {
-        // Scroll progress slit: compositor-only scaleX, no extra listeners
+        // Scroll progress slit
         const max = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-        scrollContainer.style.setProperty('--scroll-progress', max > 0 ? (scrollTop / max).toFixed(4) : '0');  // ← ADD
+        scrollContainer.style.setProperty('--scroll-progress', max > 0 ? (scrollTop / max).toFixed(4) : '0');
 
         if (scrollTop <= 0) {          // top of table: pure natural layout, as today
             _lastScrollTop = scrollTop;
+            _scrollAccum = 0;
             _setHeaderExpanded(false);
             return;
         }
         const delta = scrollTop - _lastScrollTop;
         _lastScrollTop = scrollTop;
-        if (delta > 0) _setHeaderExpanded(false);   // one step down  -> collapse
-        else if (delta < 0) _setHeaderExpanded(true); // one step up -> expand
-    }
-
-    function _setHeaderExpanded(expanded) {
-        if (expanded === _headerExpanded) return;
-        _headerExpanded = expanded;
-        scrollContainer.classList.toggle('header-expanded', expanded);
+        if (delta > 0) {               // downward: collapse now, re-arm the tolerance
+            _scrollAccum = 0;
+            _setHeaderExpanded(false);
+        } else if (delta < 0) {        // upward: expand only after sustained movement
+            _scrollAccum -= delta;
+            if (_scrollAccum >= UNCOLLAPSE_TOLERANCE) _setHeaderExpanded(true);
+        }
     }
 
     function init(container, tableBody, cols) {
@@ -91,6 +99,7 @@ const virtualScroll = (() => {
         _updateHeaderState(scrollContainer.scrollTop);   // first line
         const papers = papersStore.getFiltered();
         const total = papers.length;
+        scrollContainer.classList.toggle('table-rendered', total > 0);   // ← ADD
 
         if (total === 0) {
             _clearAllRendered();

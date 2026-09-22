@@ -83,8 +83,12 @@ const tableRenderer = (() => {
 
     function buildPdfCell(paper, isExport) {
         const td = document.createElement('td');
-        td.className = 'status-cell pdf-status emoji-column';
-        if (paper.pdf_filename && (paper.pdf_state === 'PDF' || paper.pdf_state === 'annotated')) {
+        td.className = 'status-cell emoji-column';
+        const hasLinkedPdf = paper.pdf_filename && (paper.pdf_state === 'PDF' || paper.pdf_state === 'annotated');
+        // Clickable affordance (cursor/hover) only where a click does something:
+        // live app = PDF viewer link + upload link; export = PDF file link only.
+        if (hasLinkedPdf || !isExport) td.classList.add('pdf-status');
+        if (hasLinkedPdf) {
             const a = document.createElement('a');
             a.target = '_blank';
             a.className = 'pdf-link';

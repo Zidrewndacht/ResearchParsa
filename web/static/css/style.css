@@ -99,13 +99,15 @@ html.busyCursor .loading-overlay {
     box-shadow: 0 2px 8px rgba(0,0,0,.35);
     border: 1px solid var(--primary-ui-color);
     overflow-y: auto;
-    max-height: calc(100vh - 18px);
+    height: calc(100vh - 18px);
+    background-color: #fff;       /* empty area below short tables reads as part of the table */
     position: relative;
     border-radius: 8px;
     min-width: var(--min-width);
     max-width: var(--max-width);
     margin: auto;
 }
+
 #html-export .table-container {
     max-width: var(--max-width); 
 }
@@ -634,7 +636,10 @@ tr.filter-hidden {
     position: sticky;
     bottom: -1px;
     z-index: 998;
-    border-radius: 6px
+    visibility: hidden;                 /* ← ADD: no table, no footer */
+}
+.table-rendered #counts-footer {        /* ← ADD */
+    visibility: visible;
 }
 
 #counts-footer tr {
@@ -1281,9 +1286,8 @@ li {
     }
 
     .table-container {
-        max-height: calc(100vh);
+        height: calc(100vh);
         border-radius: 0;
-        background: var(--primary-ui-color);
         border: 0
     }
 
@@ -1853,7 +1857,7 @@ tr.focus-highlight > td {
 .scroll-progress-cell {
     opacity: .9;
     padding: 0;
-    height: 5px;
+    height: 8px;
     background: var(--detail-button-background);
     box-shadow: none;
     z-index: 1;
@@ -1890,4 +1894,16 @@ tr.focus-highlight > td {
 body.edit-locked .editable-status {
     pointer-events: none;
     cursor: default;
+}
+
+/* ==========================================================================
+   Preload skeleton rows: give the served (data-less) table the same
+   full-height shape as a populated one. Removed once real data renders.
+   ========================================================================== */
+tr.skeleton-row > td {
+    height: 58px;               /* matches virtualScroll ROW_HEIGHT */
+    padding: 0;
+}
+tr.skeleton-row:nth-child(even) {
+    background-color: var(--table-row-even);
 }

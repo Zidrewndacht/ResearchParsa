@@ -6,6 +6,19 @@
  */
 const exportRenderers = (() => {
 
+    /* Lite exports strip thinking traces from the embedded data, so the
+    "unavailable" notice the server template prints cannot key off entry.trace
+    here. Detect once per page: any surviving trace means full export. */
+    let _isLite = null;
+    function _isLiteExport() {
+        if (_isLite === null) {
+            _isLite = !papersStore.getAll().some(p =>
+                [p.llm_log_entries, p.set_1_llm_log_entries, p.set_2_llm_log_entries, p.set_3_llm_log_entries]
+                    .some(list => (list || []).some(e => e && e.trace)));
+        }
+        return _isLite;
+    }
+
     function renderDetailContent(paper) {
         const c = paper.classification || {};
         const esc = tableRenderer.esc;
@@ -39,7 +52,7 @@ const exportRenderers = (() => {
             </label>`;
         }
 
-        const abstract = paper.abstract || 'No abstract available.';
+        const abstract = paper.abstract || 'Abstract not included in this HTML export.';
 
         return `
         <div class="detail-flex-container">
@@ -130,10 +143,17 @@ const exportRenderers = (() => {
                     } else {
                         if (entry.trace) {
                             contentHtml += `<div class="log-trace"><pre>${esc(entry.trace)}</pre></div>`;
+                        } else if (_isLiteExport() && entry.type !== 'user') {
+                            // Parity with shared/history_table.html: explain the missing trace
+                            contentHtml += `<div class="log-trace"><pre>Thinking trace not included in this HTML export</pre></div>`;
                         }
                         if (entry.verification_data) {
                             const vd = entry.verification_data;
-                            const vStatus = vd.verified === 1 ? '✓ Approved' : (vd.verified === 0 ? '✗ Rejected' : '❔ Unknown');
+                            const v = vd.verified;
+                            // Loose-equivalent check, matching the Jinja `== 1` / renderStatus semantics
+                            const vStatus = (v === 1 || v === true || v === '1' || v === 'true') ? '✓ Approved'
+                                : (v === 0 || v === false || v === '0' || v === 'false') ? '✗ Rejected'
+                                : '❔ Unknown';
                             contentHtml += `<div class="log-verification-summary"><strong>Verification:</strong> ${vStatus}`;
                             if (vd.estimated_score !== null && vd.estimated_score !== undefined) {
                                 contentHtml += ` | Score: ${vd.estimated_score}`;
