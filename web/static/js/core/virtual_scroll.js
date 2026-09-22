@@ -38,11 +38,15 @@ const virtualScroll = (() => {
         scrollContainer.classList.toggle('header-expanded', expanded);
     }
 
+    let _lastProgress = -1;
+    
     function _updateHeaderState(scrollTop) {
-        // Scroll progress slit
         const max = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-        scrollContainer.style.setProperty('--scroll-progress', max > 0 ? (scrollTop / max).toFixed(4) : '0');
-
+        const progress = max > 0 ? scrollTop / max : 0;
+        if (Math.abs(progress - _lastProgress) > 0.001) {   // skip tiny deltas
+            scrollContainer.style.setProperty('--scroll-progress', progress.toFixed(4));
+            _lastProgress = progress;
+        }
         if (scrollTop <= 0) {          // top of table: pure natural layout, as today
             _lastScrollTop = scrollTop;
             _scrollAccum = 0;
@@ -166,9 +170,6 @@ const virtualScroll = (() => {
         renderedStart = newStart;
         renderedEnd = newEnd;
 
-        // Duplicate shading (cheap, only touches rendered rows)
-        _applyDuplicateShading();
-
         // Restore expanded detail/history rows that were re-created after scrolling
         if (typeof restoreDetailState === 'function') restoreDetailState();
     }
@@ -176,9 +177,20 @@ const virtualScroll = (() => {
     // --- Row creation with deterministic shading ---
     function _appendPaperToFragment(fragment, paper, arrayIndex, isExport) {
         const rows = tableRenderer.renderPaper(paper, isExport);
-        // Shading is determined by position in the FILTERED ARRAY, not render order.
-        // This is stable regardless of scroll position.
         const shade = (arrayIndex & 1) ? 'alt-shade-2' : 'alt-shade-1';
+
+        // --- duplicate shading at creation time (was a separate O(n) pass) ---
+        const jTxt = (paper.deannualized_conference || paper.journal || '').trim().toLowerCase();
+        const tTxt = (paper.title || '').trim().toLowerCase();
+        const mainRow = rows[0];
+        const jCell = mainRow.cells[journalCellIndex];
+        const tCell = mainRow.cells[titleCellIndex];
+        if (jCell && jTxt && _dupJournalCounts.get(jTxt) >= 2)
+            jCell.style.backgroundColor = _dupJournalHsl.get(jTxt);
+        if (tCell && tTxt && _dupTitleCounts.get(tTxt) >= 2)
+            tCell.style.backgroundColor = _dupTitleHsl;
+        // ----------------------------------------------------------------
+
         for (const r of rows) {
             r.classList.add(shade);
             fragment.appendChild(r);

@@ -121,15 +121,34 @@ function updateUrlWithDetailState() {
     }, 100);
 }
 
+/**
+ * Expands a detail/history row instantly, bypassing the max-height/opacity CSS
+ * transition. Used when a row is re-opened automatically by the virtual
+ * scroller (restoreDetailState) rather than by a user click — animating a
+ * restored row mid-scroll causes visible stutter and a layout shift.
+ * @param {HTMLTableRowElement} row - The .detail-row or .history-row <tr>.
+ */
+function _expandInstantly(row) {
+    const container = row.querySelector('.detail-flex-container, .history-flex-container');
+    if (container) container.style.transition = 'none';
+    row.classList.add('expanded');
+    if (container) {
+        void container.offsetHeight;     // commit the expanded size while transition is off
+        container.style.transition = '';  // hand transition control back to the stylesheet
+    }
+}
+
 function restoreDetailState() {
-    // Only restore for papers currently rendered in the DOM
+    // Only restore for papers currently rendered in the DOM.
+    // Pass instant=true so restored rows appear already-open, without the
+    // max-height/opacity animation (which stutters when triggered mid-scroll).
     [...openDetailIds].forEach(paperId => {
         const mainRow = tbody.querySelector(`tr[data-paper-id="${paperId}"]`);
         if (mainRow && !mainRow.classList.contains('filter-hidden')) {
             const detailRow = mainRow.nextElementSibling;
             if (detailRow && detailRow.classList.contains('detail-row') && !detailRow.classList.contains('expanded')) {
                 const toggleButton = mainRow.querySelector('.toggle-btn[onclick*="toggleDetails"]');
-                if (toggleButton) toggleDetails(toggleButton);
+                if (toggleButton) toggleDetails(toggleButton, true);
             }
         }
     });
@@ -139,7 +158,7 @@ function restoreDetailState() {
             const historyRow = mainRow.nextElementSibling && mainRow.nextElementSibling.nextElementSibling;
             if (historyRow && historyRow.classList.contains('history-row') && !historyRow.classList.contains('expanded')) {
                 const toggleButton = mainRow.querySelector('.toggle-btn[onclick*="toggleHistory"]');
-                if (toggleButton) toggleHistory(toggleButton);
+                if (toggleButton) toggleHistory(toggleButton, true);
             }
         }
     });

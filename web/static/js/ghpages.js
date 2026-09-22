@@ -5,15 +5,60 @@
  * and client-side renderers, since there is no server to fetch from.
  */
 
-function toggleDetails(element) {
+function toggleHistory(element, instant = false) {
+    const row = element.closest('tr');
+    const historyRow = row.nextElementSibling && row.nextElementSibling.nextElementSibling && row.nextElementSibling.nextElementSibling.classList.contains('history-row') ? row.nextElementSibling.nextElementSibling : null;
+    const detailRow = row.nextElementSibling && row.nextElementSibling.classList.contains('detail-row') ? row.nextElementSibling : null;
+    if (!historyRow) return;
+    const isExpanded = historyRow.classList.contains('expanded');
+    const paperId = row.getAttribute('data-paper-id');
+    if (isExpanded) {
+        if (historyRow) historyRow.classList.remove('expanded');
+        element.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
+        element.classList.remove('toggle-pressed');
+        if (typeof openHistoryIds !== 'undefined') openHistoryIds.delete(paperId);
+        if (typeof updateUrlWithDetailState === 'function') updateUrlWithDetailState();
+    } else {
+        if (detailRow && detailRow.classList.contains('expanded')) {
+            detailRow.classList.remove('expanded');
+            const detailToggleBtn = row.querySelector('.toggle-btn[onclick*="toggleDetails"]');
+            if (detailToggleBtn) {
+                detailToggleBtn.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
+                detailToggleBtn.classList.remove('toggle-pressed');
+            }
+            if (typeof openDetailIds !== 'undefined') openDetailIds.delete(paperId);
+        }
+        if (typeof openHistoryIds !== 'undefined') openHistoryIds.add(paperId);
+        if (typeof updateUrlWithDetailState === 'function') updateUrlWithDetailState();
+        const contentPlaceholder = historyRow.querySelector('.detail-content-placeholder');
+        if (typeof papersStore !== 'undefined' && typeof exportRenderers !== 'undefined') {
+            const paper = papersStore.getPaperById(paperId);
+            if (paper) {
+                contentPlaceholder.innerHTML = exportRenderers.renderHistoryContent(paper);
+                if (instant) {
+                    // Automatic restore (virtual scroller): appear already-open, no animation.
+                    _expandInstantly(historyRow);
+                } else {
+                    // User click: animate the expansion.
+                    requestAnimationFrame(() => {
+                        historyRow.offsetHeight; // Trigger reflow
+                        historyRow.classList.add('expanded');
+                    });
+                }
+                element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
+                element.classList.add('toggle-pressed');
+            }
+        }
+    }
+}
+
+function toggleDetails(element, instant = false) {
     const row = element.closest('tr');
     const detailRow = row.nextElementSibling && row.nextElementSibling.classList.contains('detail-row') ? row.nextElementSibling : null;
     const historyRow = row.nextElementSibling && row.nextElementSibling.nextElementSibling && row.nextElementSibling.nextElementSibling.classList.contains('history-row') ? row.nextElementSibling.nextElementSibling : null;
     if (!detailRow) return;
-
     const isExpanded = detailRow.classList.contains('expanded');
     const paperId = row.getAttribute('data-paper-id');
-
     if (isExpanded) {
         detailRow.classList.remove('expanded');
         element.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
@@ -32,7 +77,6 @@ function toggleDetails(element) {
         }
         if (typeof openDetailIds !== 'undefined') openDetailIds.add(paperId);
         if (typeof updateUrlWithDetailState === 'function') updateUrlWithDetailState();
-
         const contentPlaceholder = detailRow.querySelector('.detail-content-placeholder');
         if (typeof papersStore !== 'undefined' && typeof exportRenderers !== 'undefined') {
             const paper = papersStore.getPaperById(paperId);
@@ -49,10 +93,16 @@ function toggleDetails(element) {
                         }
                     }
                 });
-                requestAnimationFrame(() => {
-                    detailRow.offsetHeight; // Trigger reflow
-                    detailRow.classList.add('expanded');
-                });
+                if (instant) {
+                    // Automatic restore (virtual scroller): appear already-open, no animation.
+                    _expandInstantly(detailRow);
+                } else {
+                    // User click: animate the expansion.
+                    requestAnimationFrame(() => {
+                        detailRow.offsetHeight; // Trigger reflow
+                        detailRow.classList.add('expanded');
+                    });
+                }
                 element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
                 element.classList.add('toggle-pressed');
             }
@@ -60,49 +110,6 @@ function toggleDetails(element) {
     }
 }
 
-function toggleHistory(element) {
-    const row = element.closest('tr');
-    const historyRow = row.nextElementSibling && row.nextElementSibling.nextElementSibling && row.nextElementSibling.nextElementSibling.classList.contains('history-row') ? row.nextElementSibling.nextElementSibling : null;
-    const detailRow = row.nextElementSibling && row.nextElementSibling.classList.contains('detail-row') ? row.nextElementSibling : null;
-    if (!historyRow) return;
-
-    const isExpanded = historyRow.classList.contains('expanded');
-    const paperId = row.getAttribute('data-paper-id');
-
-    if (isExpanded) {
-        historyRow.classList.remove('expanded');
-        element.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
-        element.classList.remove('toggle-pressed');
-        if (typeof openHistoryIds !== 'undefined') openHistoryIds.delete(paperId);
-        if (typeof updateUrlWithDetailState === 'function') updateUrlWithDetailState();
-    } else {
-        if (detailRow && detailRow.classList.contains('expanded')) {
-            detailRow.classList.remove('expanded');
-            const detailToggleBtn = row.querySelector('.toggle-btn[onclick*="toggleDetails"]');
-            if (detailToggleBtn) {
-                detailToggleBtn.innerHTML = '<span>Show</span><br><span class="arrow">▼</span>';
-                detailToggleBtn.classList.remove('toggle-pressed');
-            }
-            if (typeof openDetailIds !== 'undefined') openDetailIds.delete(paperId);
-        }
-        if (typeof openHistoryIds !== 'undefined') openHistoryIds.add(paperId);
-        if (typeof updateUrlWithDetailState === 'function') updateUrlWithDetailState();
-
-        const contentPlaceholder = historyRow.querySelector('.detail-content-placeholder');
-        if (typeof papersStore !== 'undefined' && typeof exportRenderers !== 'undefined') {
-            const paper = papersStore.getPaperById(paperId);
-            if (paper) {
-                contentPlaceholder.innerHTML = exportRenderers.renderHistoryContent(paper);
-                requestAnimationFrame(() => {
-                    historyRow.offsetHeight; // Trigger reflow
-                    historyRow.classList.add('expanded');
-                });
-                element.innerHTML = '<span>Hide</span><br><span class="arrow">▲</span>';
-                element.classList.add('toggle-pressed');
-            }
-        }
-    }
-}
 
 document.addEventListener('DOMContentLoaded', function () {
     if (document.body.id !== 'html-export') return;
