@@ -289,18 +289,6 @@ OK      Fix broken history layout when amount of inferred colums change.
 OK      Automatic CSS width according to domain_config column counts
 OK      Convert HTML comments to Jinja2 server-side comments
 
-
-        Add further 'agentic' functionality:
-                Automatic de-annualize conferences on import onto a separate DB field (to be used for more reliable stats generation) 
-                        check existing conference names before creating to ensure no two names for the same conference;
-                        Also look at the existing model names and research areas, etc. when inferring a new one?
-                        Access DB for "memory" of existing conferences so it doesn't deannualize the same conference in different ways somehow.
-                Automatic group together synonym keywords
-                Potential tools: 
-                        PDF parsing (when available), tool collects PDF intro and conclusions to be added to classification/verification
-                                might as well just go for PDF full text at this point nowadays instead.
-                                ...?
-
 OK      Update prompt templates: fixed base + dynamic domain-specific parts.
 
 OK      Add a viewer for queue manager logs
@@ -331,13 +319,30 @@ OK      fix backup test side effect: backup_before_restore.parsa.tzst is inadver
 
         Add optional stats page layout with no domain-specific fields (RP-Lite based?) + enable/disable option in domain_config.yaml
 
-        Add a button in history for agent trace review report: reads the complete log stream (from oldest to newest per set) from all sets and reports issues/explains conflicts across sets, etc.
-                Adds a colored entry in the main log with the report but does NOT recalculates main set.
+OK      Add a button in history for agent trace review report: reads the complete log stream (from oldest to newest per set) from all sets and reports issues/explains conflicts across sets, etc.
+OK              Adds a colored entry in the main log with the report but does NOT recalculates main set.
+                Improve data format/frontend to better show a TL;DR of the trace review
+
 
         Add multilingual UI support?
 
-        Fix regression: detail row animation missing *sometimes*?
+OK      Fix regression: detail row animation missing *sometimes*?
+OK              Probably gone after SSR > SPA refactor anyway
 
 OK      Add a manual fast screening pass (to be used with a simpler model, prefer false positives)
                 This is NOT included in automated classify to consensus because it's meant for a separate model -- and orchestration of those is currently out-of-scope:
                         ResearchParça simply assumes the model provided by the endpoint is the one to be used.
+
+        Add further automation functionality:
+                Automatic de-annualize conferences on import onto a separate DB field (to be used for more reliable stats generation) 
+                        check existing conference names before creating to ensure no two names for the same conference;
+                        Also look at the existing model names and research areas, etc. when inferring a new one?
+                        Access DB for "memory" of existing conferences so it doesn't deannualize the same conference in different ways somehow.
+                Automatic group together synonym keywords
+                Potential tools: 
+                        PDF parsing (when available), tool collects PDF intro and conclusions to be added to classification/verification
+                                might as well just go for PDF full text at this point nowadays instead.
+                                ...?
+
+        Add free agent functionality:
+                Pi.dev integration with API tooling: natural language for search, read row contents, deeplinking, templated-ish report generation, chat.
