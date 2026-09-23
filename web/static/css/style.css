@@ -1891,7 +1891,7 @@ tr.focus-highlight > td {
     transform: scale(2) translate(1px,-1.5px);
 }
 
-body.edit-locked .editable-status {
+body.edit-locked .editable-status, body.edit-locked .editable-verify {
     pointer-events: none;
     cursor: default;
 }
