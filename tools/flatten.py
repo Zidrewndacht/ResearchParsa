@@ -306,7 +306,7 @@ def main():
     # Updated to reflect the new folder structure (modules, web/static, web/templates, etc.)
     FILE_LIST = [
         #### #### # Root files
-        # "browse_db.py",
+        "browse_db.py",
         "queue_manager.py",
         # "example_config/config.yaml"
         # "example_config/domain_config.yaml"
@@ -341,12 +341,12 @@ def main():
         "shared/db.py",
         
         # #### #### #Web module
-        # # "web/__init__.py",
-        # "web/export_logic.py",
+        # "web/__init__.py",
+        "web/export_logic.py",
         # "web/filters.py",
-        # "web/importer.py",
-        # "web/routes_data.py",
-        # "web/routes_files.py",
+        "web/importer.py",
+        "web/routes_data.py",
+        "web/routes_files.py",
         # "web/routes_ui.py",
         # "web/routes_agreement.py",
         # #### "web/LICENSE",

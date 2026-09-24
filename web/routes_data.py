@@ -198,6 +198,8 @@ def upload_bibtex():
             
         return jsonify({'status': 'success', 'message': f'{"BibTeX" if filename.endswith(".bib") else "CSV"} file imported successfully.'})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Error importing file: {e}")
         return jsonify({'status': 'error', 'message': f'Import failed: {e!s}'}), 500
     finally:

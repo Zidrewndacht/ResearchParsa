@@ -603,7 +603,8 @@ th.inferred-header-3 {
     flex-direction: row;
     justify-content: space-between;
     padding: 0 3px 0 0;
-    align-items: end
+    align-items: end;
+    text-wrap: nowrap;
 }
 
 .filter-item {

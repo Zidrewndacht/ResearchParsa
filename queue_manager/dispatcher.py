@@ -24,10 +24,17 @@ def _send_to_vllm_sync(task):
     prompt = task['prompt']
     model_alias = task.get('model_alias', 'default')
     state_machine = task.get('state_machine')
-    
+
     log(f"{_color_prefix('SENDING:', Colors.VLLM_SEND)} task={task_id} type={task_type} paper={paper_id} set={set_num}")
-    log_file_dispatch(task['task_id'], task['task_type'], task['paper_id'], task.get('set_num'))
-        
+    log_file_dispatch(task_id, task_type, paper_id, set_num)
+
+    content = None
+    model_name = "unknown"
+    reasoning_trace = ""
+    llm_data = None
+    success = False
+    error_detail = None
+
     try:
         content, model_name, reasoning_trace = config.send_prompt_to_llm(
             prompt,
@@ -36,34 +43,77 @@ def _send_to_vllm_sync(task):
             is_verification=(task_type == TASK_VERIFY),
             llm_params=task.get('llm_params')
         )
-        
-        success = content is not None
-        llm_data = json.loads(content) if success and content else None
-        
+
+        if content is None:
+            success = False
+            error_detail = reasoning_trace or "LLM returned no content"
+        else:
+            try:
+                llm_data = json.loads(content) if content else None
+                success = True
+            except json.JSONDecodeError as e:
+                success = False
+                error_detail = f"Invalid JSON returned by LLM: {e}"
+            except Exception as e:
+                success = False
+                error_detail = f"Failed to process LLM content: {e}"
+
     except Exception as e:
-        log(f"{_color_prefix('ERROR:', Colors.ERROR)} task={task_id} error={e}")
-        log_file_error('vllm_call', e, task_id=task_id, paper_id=paper_id, set_num=set_num)
         success = False
-        llm_data = None
-        model_name = "error"
-        reasoning_trace = str(e)
-        content = ""
-    
+        error_detail = f"vLLM call exception: {e}"
+        if not reasoning_trace:
+            reasoning_trace = str(e)
+
     # Decrement in-flight AFTER processing
     state.decrement_in_flight(task_type)
-    
+
+    if not success:
+        log(
+            f"{_color_prefix('ERROR:', Colors.ERROR)} "
+            f"task={task_id} type={task_type} paper={paper_id} set={set_num} error={error_detail}"
+        )
+
+        if content is not None:
+            log(f"{_color_prefix('FULL VLLM OUTPUT:', Colors.ERROR)} task={task_id}\n{content}")
+
+        if reasoning_trace:
+            log(f"{_color_prefix('FULL VLLM TRACE/ERROR:', Colors.ERROR)} task={task_id}\n{reasoning_trace}")
+
+        log_file_error(
+            'vllm_call',
+            error_detail or 'unknown vLLM error',
+            task_id=task_id,
+            paper_id=paper_id,
+            set_num=set_num,
+            model_name=model_name,
+            content=content if content is not None else "",
+            reasoning_trace=reasoning_trace if reasoning_trace is not None else "",
+        )
+
     # Invoke callback
     if state_machine:
         if hasattr(state_machine, 'on_set_complete'):
-            state_machine.on_set_complete(set_num, success, llm_data, model_name, reasoning_trace or "", content or "")
+            state_machine.on_set_complete(
+                set_num,
+                success,
+                llm_data,
+                model_name,
+                reasoning_trace or "",
+                content or ""
+            )
         elif hasattr(state_machine, 'on_task_complete'):
-            state_machine.on_task_complete(success, llm_data, model_name, reasoning_trace or "", content or "")
-    
+            state_machine.on_task_complete(
+                success,
+                llm_data,
+                model_name,
+                reasoning_trace or "",
+                content or ""
+            )
+
     log(f"{_color_prefix('COMPLETE:', Colors.VLLM_COMPLETE)} task={task_id} success={success}")
     log_file_complete(task_id, task_type, success, model_name if success else None, reasoning_trace if not success else None)
-
     log_queue_status()
-
+    
 def send_to_vllm(task):
     """Send task to vLLM asynchronously (fire-and-forget)."""
     thread = threading.Thread(target=_send_to_vllm_sync, args=(task,))

@@ -1,18 +1,16 @@
 # web/importer.py
-# v1.2
-# Importer for the v1.2 PCB inspection papers database.
-# Assumes the v1.2 database schema already exists.
-# wait, is this still for v1.2?! Apparently it's already v1.4 and this comment is stale.
+# v1.5
+# Domain-agnostic BibTeX/CSV importer for the ResearchParsa database.
+# The database schema relies on JSON blobs for classification data, 
+# which is entirely driven by the active domain_config.yaml.
 
 import csv
 import os
 import re
 import sqlite3
-import sys
 
 import bibtexparser
-from bibtexparser.bparser import BibTexParser
-from bibtexparser.customization import homogenize_latex_encoding
+from bibtexparser.model import Entry
 
 # from shared import config
 
@@ -329,6 +327,70 @@ def convert_csv_to_bibtex(csv_file_path: str) -> list[str]:
                 continue
     return bibtex_entries
 
+def pre_clean_latex_macros(text):
+    """
+    Remove/normalize common LaTeX macros before bibtexparser sees them.
+
+    This is important because bibtexparser's old homogenize_latex_encoding
+    helper can crash on macros like \textellipsis.
+    """
+    if text is None:
+        return ""
+
+    if not isinstance(text, str):
+        text = str(text)
+
+    if not text:
+        return text
+
+    replacements = {
+        r'\textellipsis': '...',
+        r'\ldots': '...',
+        r'\dots': '...',
+        r'\textendash': '-',
+        r'\textemdash': '-',
+        r'\endash': '-',
+        r'\emdash': '-',
+        r'\textquotedblleft': '"',
+        r'\textquotedblright': '"',
+        r'\&': '&',
+        r'\%': '%',
+        r'\_': '_',
+        r'\#': '#',
+        r'\$': '$',
+        r'\{': '{',
+        r'\}': '}',
+        r'\^': '^',
+        r'\~': '~',
+    }
+
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    return text
+
+
+def clean_import_text(value):
+    """
+    Clean a BibTeX/LaTeX field for storage in the DB.
+
+    This replaces the brittle bibtexparser homogenize_latex_encoding behavior
+    with a deterministic local cleaner.
+    """
+    if value is None:
+        return ""
+
+    if not isinstance(value, str):
+        value = str(value)
+
+    value = pre_clean_latex_macros(value)
+    value = clean_latex_commands(value)
+
+    # Remove backslashes before non-letter escapes, e.g. \' -> '
+    value = re.sub(r'\\([^a-zA-Z])', r'\1', value)
+
+    return value.strip()
+
 def normalize_title_for_comparison(title):
     """Normalize title for duplicate detection by removing case, extra whitespace, and common variations."""
     if not title:
@@ -353,151 +415,254 @@ def normalize_title_for_comparison(title):
     return normalized
 
 def import_bibtex(bib_file, db_path):
-    """Import BibTeX file into existing v1.2 SQLite database"""
     if not os.path.exists(db_path):
-        print(f"Error: Database file '{db_path}' does not exist.")
-        sys.exit(1)
-    parser = BibTexParser(common_strings=True, homogenize_fields=True)
-    parser.customization = homogenize_latex_encoding
-    parser.ignore_nonstandard_types = False
-    with open(bib_file, 'r', encoding='utf-8') as f:
-        bib_db = bibtexparser.load(f, parser=parser)
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='papers'")
-    if not cursor.fetchone():
-        print("Error: The 'papers' table is missing.")
-        conn.close()
-        sys.exit(1)
+        raise FileNotFoundError(f"Database file '{db_path}' does not exist.")
+
+    # v2 is orders of magnitude faster and fault-tolerant.
+    print("[Import] Parsing BibTeX file...", flush=True)
+    with open(bib_file, 'r', encoding='utf-8', errors='replace') as f:
+        bib_string = f.read()
         
-    schema_cols = [
-        "id", "type", "title", "authors", "year", "month", "journal", "volume", "pages", "page_count",
-        "doi", "issn", "abstract", "keywords", "deannualized_conference",
-        "user_trace", "changed", "changed_by", "verified", "verified_by", "estimated_score",
-        "user_override_count", "pdf_filename", "pdf_state", "main_certainty", "classification",
-        "set_1_llm", "set_2_llm", "set_3_llm", "set_1_llm_log", "set_2_llm_log", "set_3_llm_log", "llm_log"
-    ]
+    library = bibtexparser.parse_string(bib_string)
     
-    total_entries = len(bib_db.entries)
-    processed_count = 0
-    duplicate_count = 0
-    print(f"Starting import of {total_entries} entries...")
-    for entry in bib_db.entries:
-        # Initialize all schema columns to None
-        data = {col: None for col in schema_cols}
-        
-        # Set required defaults expected by the application logic
-        data['user_override_count'] = 0
-        data['pdf_state'] = 'none'
-        data['set_1_llm_log'] = '[]'
-        data['set_2_llm_log'] = '[]'
-        data['set_3_llm_log'] = '[]'
-        data['llm_log'] = '[]'
-        data['main_certainty'] = '{}'
-        data['classification'] = '{}'
+    # Filter only actual entries (ignores comments, preambles, and malformed blocks)
+    entries = [b for b in library.blocks if isinstance(b, Entry)]
+    total_entries = len(entries)
+    
+    print(f"[Import] Parsed {total_entries} BibTeX entries.", flush=True)
 
-        title_raw = entry.get('title', '')
-        cleaned_title = clean_latex_commands(title_raw)
-        
-        raw_pages = entry.get('pages', '')
-        normalized_pages, computed_page_count = parse_pages(raw_pages)
+    if total_entries == 0:
+        print("Import completed: 0 records imported, 0 duplicates skipped", flush=True)
+        return
 
-        # Try to get page_count from numpages field
-        numpages_str = entry.get('numpages', '')
-        page_count = None
-        if numpages_str and str(numpages_str).isdigit():
-            page_count = int(numpages_str)
-        else:
-            page_count = computed_page_count
-            
-        year_str = entry.get('year', '')
-        year = int(year_str) if str(year_str).isdigit() else None
-        
-        doi = entry.get('doi', '')
-        title = cleaned_title
-        
-        duplicate_found = False
-        if doi:
-            cursor.execute("SELECT id FROM papers WHERE doi = ?", (doi,))
-            if cursor.fetchone():
-                # print(f"Skipping duplicate entry with DOI '{doi}'")
-                duplicate_found = True
-                
-        if not duplicate_found and title:
-            normalized_title = normalize_title_for_comparison(title)
-            if year:
-                cursor.execute("SELECT id FROM papers WHERE LOWER(title) = ? AND year = ?", (normalized_title, year))
-                if cursor.fetchone():
-                    duplicate_found = True
-            if not duplicate_found:
-            # Also check for exact title match (case-insensitive) as additional safeguard
-                cursor.execute("SELECT id FROM papers WHERE LOWER(title) = LOWER(?)", (title,))
-                if cursor.fetchone():
-                    duplicate_found = True
-                    
-        if duplicate_found:
-            duplicate_count += 1
-            continue  # Skip this entry
-        # Generate a unique ID if the original ID already exists
+    conn = sqlite3.connect(db_path, timeout=30)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA temp_store=MEMORY")
+        conn.execute("PRAGMA cache_size=-64000")
 
-        original_id = entry.get('ID', '')
-        final_id = original_id
-        counter = 1
-        while True:
-            cursor.execute("SELECT id FROM papers WHERE id = ?", (final_id,))
-            if not cursor.fetchone():
-                break
-            final_id = f"{original_id}_{counter}"
-            counter += 1
+        cursor = conn.cursor()
 
-        # Normalize entry type: always use 'inproceedings' for conferences
-        entry_type = entry.get('ENTRYTYPE', '').lower()
-        if entry_type == 'conference':
-            entry_type = 'inproceedings'
-            
-        data['id'] = final_id
-        data['type'] = entry_type
-        data['title'] = cleaned_title
-        data['authors'] = parse_authors(entry.get('author', ''))
-        data['year'] = year
-        data['month'] = entry.get('month', '')
-        data['journal'] = entry.get('journal', '') or entry.get('booktitle', '')
-        data['volume'] = entry.get('volume', '')
-        data['pages'] = normalized_pages
-        data['page_count'] = page_count
-        data['doi'] = doi
-        data['issn'] = entry.get('issn', '')
-        data['abstract'] = entry.get('abstract', '')
-        data['keywords'] = parse_keywords(entry.get('keywords', ''))
-        
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='papers'")
+        if not cursor.fetchone():
+            raise RuntimeError("The 'papers' table is missing.")
+
+        placeholder_title = (
+            "Database is missing or empty. Import BibTeX or restore from a backup to start working"
+        )
+
+        print("[Import] Locating placeholder row...", flush=True)
+        cursor.execute("SELECT id FROM papers WHERE title = ?", (placeholder_title,))
+        row = cursor.fetchone()
+        placeholder_id = str(row[0]) if row else None
+
+        print("[Import] Loading existing records for in-memory duplicate detection...", flush=True)
+        existing_ids = set()
+        existing_dois = set()
+        existing_lower_titles = set()
+        existing_normalized_title_year = set()
+
+        cursor.execute("SELECT id, doi, title, year FROM papers")
+        for pid, doi, title, year in cursor.fetchall():
+            if pid is not None:
+                pid_str = str(pid)
+                if placeholder_id is not None and pid_str == placeholder_id:
+                    continue
+                existing_ids.add(pid_str)
+
+            if doi:
+                existing_dois.add(str(doi).strip().lower())
+
+            if title and str(title) != placeholder_title:
+                title_str = str(title)
+                lower_title = title_str.strip().lower()
+                if lower_title:
+                    existing_lower_titles.add(lower_title)
+
+                normalized_title = normalize_title_for_comparison(title_str)
+                if normalized_title:
+                    existing_normalized_title_year.add((normalized_title, year))
+
+        print(
+            f"[Import] Duplicate state loaded: "
+            f"ids={len(existing_ids)} | "
+            f"dois={len(existing_dois)} | "
+            f"titles={len(existing_lower_titles)}",
+            flush=True
+        )
+
+        schema_cols = [
+            "id", "type", "title", "authors", "year", "month", "journal", "volume", 
+            "pages", "page_count", "doi", "issn", "abstract", "keywords", 
+            "deannualized_conference", "user_trace", "changed", "changed_by", 
+            "verified", "verified_by", "estimated_score", "user_override_count", 
+            "pdf_filename", "pdf_state", "main_certainty", "classification", 
+            "set_1_llm", "set_2_llm", "set_3_llm", "set_1_llm_log", 
+            "set_2_llm_log", "set_3_llm_log", "llm_log"
+        ]
+
+        insert_sql = f"""
+            INSERT INTO papers ({", ".join(schema_cols)})
+            VALUES ({", ".join(f":{col}" for col in schema_cols)})
+        """
+
+        batch = []
+        batch_size = 1000
+        processed_count = 0
+        duplicate_count = 0       
+        skipped_count = 0
+
+        # Safe rectangle characters with ASCII fallback
+        fill_char, empty_char = "█", "░"
         try:
-            columns = ', '.join(data.keys())
-            placeholders = ', '.join([f":{k}" for k in data])
-            insert_query = f"INSERT INTO papers ({columns}) VALUES ({placeholders})"
-            cursor.execute(insert_query, data)
-        except Exception as e:
-            print(f"\nError inserting entry '{data['id']}': {e}")
-            continue
+            fill_char.encode(sys.stdout.encoding or 'utf-8')
+            empty_char.encode(sys.stdout.encoding or 'utf-8')
+        except Exception:
+            fill_char, empty_char = "#", "."
+
+        def print_progress(current):
+            percent = int(current * 100 / total_entries)
+            filled = int(50 * current / total_entries)
+            bar = fill_char * filled + empty_char * (50 - filled)
+            print(
+                f"\rProgress:    [{bar}] {percent}% ({current}/{total_entries})",
+                end='',
+                flush=True
+            )
+
+        print(f"Starting import of {total_entries} entries...", flush=True)
+
+        for idx, block in enumerate(entries, start=1):
+            entry_type = str(block.entry_type or '').lower()
             
-        processed_count += 1
-        
-        if total_entries > 0:
-            if processed_count % 100 == 0 or processed_count == total_entries - duplicate_count:
-                progress_percentage = int((processed_count / total_entries) * 100)
-                filled_length = int(50 * processed_count // total_entries)
-                bar = '█' * filled_length + '.' * (50 - filled_length)
-                print(f"\r{'Progress:':<12} [{bar}] {progress_percentage}% ({processed_count}/{total_entries})", end='', flush=True)
-                sys.stdout.flush()  # Force immediate output
+            # Skip entire proceedings (they are just metadata about the conference, not actual papers)
+            if entry_type == 'proceedings':
+                skipped_count += 1
+                if idx % 100 == 0 or idx == total_entries:
+                    print_progress(idx)
+                continue
 
-    # Check if placeholder record with id=1 exists before import
-    cursor.execute("SELECT COUNT(*) FROM papers WHERE id = '1'")    #Should actually check if this is the placeholder, surely?
-    placeholder_exists = cursor.fetchone()[0] > 0
-    # Delete the placeholder record with id=1 if it existed before import
-    if placeholder_exists and processed_count > 0:
-        cursor.execute("DELETE FROM papers WHERE id = '1'")
-        print("\nRemoved placeholder record with id=1")
+            # Normalize conference to inproceedings
+            if entry_type == 'conference':
+                entry_type = 'inproceedings'
 
-    conn.commit()
-    print(f"\nImport completed: {processed_count} records imported, {duplicate_count} duplicates skipped")
-    conn.close()
+            # v2 stores fields as objects; convert to a lowercase-keyed dict
+            fields = {str(f.key).lower(): str(f.value) for f in block.fields}
+
+            title = clean_latex_commands(fields.get('title', ''))
+            doi_raw = clean_latex_commands(fields.get('doi', ''))
+            doi_key = doi_raw.lower()
+
+            year_str = str(fields.get('year', '') or '').strip()
+            year = int(year_str) if year_str.isdigit() else None
+
+            duplicate_found = False
+
+            if doi_key and doi_key in existing_dois:
+                duplicate_found = True
+
+            if not duplicate_found and title:
+                lower_title = title.strip().lower()
+                normalized_title = normalize_title_for_comparison(title)
+
+                if lower_title and lower_title in existing_lower_titles:
+                    duplicate_found = True
+                elif normalized_title and (normalized_title, year) in existing_normalized_title_year:
+                    duplicate_found = True
+
+            if not duplicate_found:
+                original_id = str(block.key or '').strip()
+                if not original_id:
+                    original_id = clean_bibtex_key(title or "paper")
+
+                final_id = original_id
+                counter = 1
+                while final_id in existing_ids:
+                    final_id = f"{original_id}_{counter}"
+                    counter += 1
+
+                raw_pages = str(fields.get('pages', '') or '')
+                normalized_pages, computed_page_count = parse_pages(raw_pages)
+
+                numpages_str = str(fields.get('numpages', '') or '').strip()
+                if numpages_str.isdigit():
+                    page_count = int(numpages_str)
+                else:
+                    page_count = computed_page_count
+
+                data = {col: None for col in schema_cols}
+
+                data['id'] = final_id
+                data['type'] = entry_type or 'misc'
+                data['title'] = title
+                data['authors'] = parse_authors(clean_latex_commands(fields.get('author', '')))
+                data['year'] = year
+                data['month'] = clean_latex_commands(fields.get('month', ''))
+                data['journal'] = (
+                    clean_latex_commands(fields.get('journal', ''))
+                    or clean_latex_commands(fields.get('booktitle', ''))
+                )
+                data['volume'] = clean_latex_commands(fields.get('volume', ''))
+                data['pages'] = normalized_pages
+                data['page_count'] = page_count
+                data['doi'] = doi_raw or None
+                data['issn'] = clean_latex_commands(fields.get('issn', ''))
+                data['abstract'] = clean_latex_commands(fields.get('abstract', ''))
+                data['keywords'] = parse_keywords(clean_latex_commands(fields.get('keywords', '')))
+
+                data['user_override_count'] = 0
+                data['pdf_state'] = 'none'
+                data['main_certainty'] = '{}'
+                data['classification'] = '{}'
+                data['set_1_llm_log'] = '[]'
+                data['set_2_llm_log'] = '[]'
+                data['set_3_llm_log'] = '[]'
+                data['llm_log'] = '[]'
+
+                # Update in-memory state immediately to catch duplicates inside the same file
+                existing_ids.add(final_id)
+                if doi_key:
+                    existing_dois.add(doi_key)
+                if title:
+                    lower_title = title.strip().lower()
+                    if lower_title:
+                        existing_lower_titles.add(lower_title)
+                    normalized_title = normalize_title_for_comparison(title)
+                    if normalized_title:
+                        existing_normalized_title_year.add((normalized_title, year))
+
+                batch.append(data)
+                processed_count += 1
+
+                if len(batch) >= batch_size:
+                    cursor.executemany(insert_sql, batch)
+                    batch.clear()
+
+            if idx % 100 == 0 or idx == total_entries:
+                print_progress(idx)
+
+        if batch:
+            cursor.executemany(insert_sql, batch)
+            batch.clear()
+
+        if processed_count > 0 and placeholder_id is not None:
+            cursor.execute("DELETE FROM papers WHERE id = ?", (placeholder_id,))
+            print(f"\nRemoved placeholder record with id={placeholder_id}", flush=True)
+
+        print("\n[Import] Committing transaction...", flush=True)
+        conn.commit()
+
+        print(
+            f"Import completed: {processed_count} records imported, "
+            f"{duplicate_count} duplicates skipped, "
+            f"{skipped_count} proceedings skipped",
+            flush=True
+        )
+
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

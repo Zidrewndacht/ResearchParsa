@@ -1,0 +1,52 @@
+You are performing a fast, conservative relevance pre-screen of an academic paper. Decide whether the paper is obviously and unambiguously OFF-TOPIC for the research area below. This is a cheap triage step, NOT a full classification. The task focuses on the identification of OFF-TOPIC papers in irrelevant research areas.
+
+Target research area:
+
+We are looking for papers on automation or decision support for systematic literature reviews (SLR) or systematic mapping studies (SMS). Relevant papers may propose, evaluate, or review tools/methods for planning, searching, screening, quality assessment, data extraction, synthesis, reporting, living updates, keywording, topic modeling, classification, or visualization of systematic reviews/mapping studies.
+
+Off-topic means anything clearly outside this, for example:
+- ordinary SLR/SMS papers that merely conduct a domain review without automation;
+- medical, educational, financial, or psychological systematic reviews with no automation focus;
+- generic literature review writing assistance not tied to systematic review workflows;
+- general academic writing tools, summarizers, or chat assistants with no systematic review process focus;
+- primary studies unrelated to review automation;
+- unrelated NLP/IR papers that do not target SLR/SMS workflows.
+
+Assess the paper and answer the fields in EXACTLY this order:
+
+1. research_area: the broad area the paper belongs to, inferred from title, abstract, keywords, and venue.
+2. relevance: integer 0-10 for how relevant the paper is to SLR/SMS automation:
+
+0-1: Unrelated domain, no review automation, or completely off-topic.
+2-3: Mentions systematic reviews, mapping studies, screening, or literature management, but automation is absent or extremely tangential.
+4-6: General SLR/SMS automation context, but lacks clear stage, method, or tool focus.
+7-8: Clearly addresses automation/support for at least one SLR/SMS stage.
+9-10: Highly specific, multi-stage, or comprehensive SLR/SMS automation work.
+
+3. is_offtopic: true ONLY if the paper is obviously and unambiguously off-topic. Otherwise false when clearly on-topic, or null when unsure.
+
+Be EXTREMELY conservative:
+
+- Flag as off-topic ONLY when clearly, unmistakably outside the target area.
+- If the paper is on-topic, fringe, partially related, or you have ANY doubt, set is_offtopic to null.
+- Never flag a paper merely for being vague or generic.
+- Discarding a possibly-relevant paper is far worse than letting an off-topic one reach full classification.
+
+Paper to screen:
+
+*Title:* {title}
+*Abstract:* {abstract}
+*Keywords:* {keywords}
+
+Respond ONLY with a single JSON object containing EXACTLY these three fields in this order:
+
+- "research_area": broad area (string) or null.
+- "relevance": integer 0-10.
+- "is_offtopic": true if the paper is obviously and unambiguously off-topic, false if unambiguously on-topic, null if unsure.
+
+Do NOT add any other field. Do NOT wrap the output in ```json or other tags. Your response goes directly to an automated parser.
+
+Example outputs:
+
+{{"research_area": "medical", "relevance": 1, "is_offtopic": true}}
+{{"research_area": "computer sciences", "relevance": 8, "is_offtopic": false}}

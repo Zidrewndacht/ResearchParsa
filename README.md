@@ -18,13 +18,23 @@ By defining your domain's taxonomy, filters, and prompt templates in a YAML conf
   Define your research domain's taxonomy, custom fields, filter types (tri-state, inclusion), and LLM prompt templates via `domain_config.yaml`. The UI, database JSON blobs, and statistics engine adapt dynamically to your schema.
 
 - **LLM‑Powered Classification & Verification**  
-  A separate **queue manager** (`queue_manager.py`) coordinates communication with an **OpenAI‑compatible LLM server** (mostly tested with vLLM, which allows for high concurrency which the task is exceedingly friendly for).  
+  A separate **queue manager** (`queue_manager.py`) coordinates communication with an **OpenAI‑compatible LLM server** (specifically designed and tested for **Qwen3.5~3.8 via vLLM**).  
   - Each paper is classified **three times independently** to calculate certainty and detect conflicts.  
-  - A **verifier** LLM scores the classification accuracy and provides reasoning traces.  
+  - A **verifier** LLM scores the classification accuracy and provides reasoning traces. The backend automatically extracts and logs Qwen's native thinking traces (`reasoning_content`) for auditing.
   - An advanced **“Consensus” mode** iteratively re-classifies disputed papers until the verifier agrees or a limit is reached.  
 
+- **Quick Screening & Meta‑Audits**
+  - **Quick Screening (`/screen`)**: A fast, thinking-disabled triage route designed to flag obviously off-topic papers before expensive full-classification, saving significant compute.
+  - **Agent Trace Review**: A meta-review feature where an LLM audits the complete reasoning logs of the 3 parallel agents to identify hallucinations, prompt misreadings, or contradictions.
+
+- **Dedicated Agreement Report**  
+  A whole-dataset dashboard (accessible via the Batch Tasks menu) that visualizes pipeline health, contradiction outliers, relevance correlations, and consensus progress over time. It generates Wilson 95% Confidence Intervals and provides one-click LaTeX table exports for your manuscript.
+
+- **Interactive Web Interface**  
+  A Flask-based application featuring a **Virtual Scroller** that handles large datasets seamlessly minimizing DOM lag. Includes an **Edit Lock** toggle to prevent accidental clicks on definitive cells, and preserves your exact filter/sort state in the URL for bookmarking.
+
 - **Traceability & History**  
-  Every AI classification, verification, and user edit is strictly logged. The “History” view provides per-set and averaged logs, LLM reasoning traces, change highlighting, and certainty indicators (translucent emojis for partial agreement; ⚠️ for conflicts).
+  Every AI classification, verification, and user edit is logged. The “History” view provides per-set and averaged logs, LLM reasoning traces, change highlighting, and certainty indicators (translucent emojis for partial agreement; ⚠️ for conflicts).
 
 - **Advanced Filtering & Search**  
   Server-side filters (year, page count) and dynamic client-side filtering based on your domain's configuration. The global search bar indexes all metadata, abstracts, keywords, and user comments.
@@ -62,16 +72,32 @@ https://github.com/user-attachments/assets/3a12f927-1050-485e-b6f7-5df151685a58
     - Import a BibTeX (`.bib`) or IEEE Xplore CSV file directly from the web interface. If no database exists, the app initializes a fresh schema.
 
 3.  **LLM Integration**:
-    - Start an **OpenAI‑compatible inference server** (vLLM is strongly recommended for high‑throughput batch processing).
+    - Start a local **vLLM** OpenAI-compatible inference server (strongly recommended for high-throughput batch processing and native thinking-trace support).
+    - The system is currently designed and tested specifically for **Qwen3.5~3.8** models. *(Note: While it may work with other cloud-based APIs or reasoning models, they remain untested).*
     - Configure the server URL and API keys in `config.yaml`.
-    - Use the **Batch Tasks** menu in the web UI to trigger classifications, verifications, or consensus runs across your dataset.
+    - Use the **Batch Tasks** menu in the web UI to trigger classifications, verifications, quick screenings, or consensus runs across your dataset.
 
-4.  **Interactive Help**:
-    - Click the **?** button in the top‑right corner for a detailed guide on symbols, keyboard shortcuts (F1 for help, F3 for search, Ctrl+S to save), and UI features.
+4.  **Interactive Help & Shortcuts**:
+    - Click the **?** button in the top‑right corner for a detailed guide on symbols and UI features.
+    - **Keyboard Shortcuts**:
+      - `F1`: Open Help/About modal
+      - `F3`: Focus Search bar
+      - `F4`: Open Statistics modal
+      - `Ctrl+S` / `Cmd+S`: Save changes in an expanded detail row
+      - `Esc`: Close active modals
 
 5. **Testing**:
     - This uses Pytest, Playwright, pytest-xdist and pytest-cov coverage for unit, integration and E2E testing. To run: `pytest --cov=. --cov-report=term-missing -n auto` for headless testing with coverage report or `python -m pytest -v --headed --slow-mo 500` for Playwright tests with a visible browser.
     
+
+6.  **CLI Tools for Meta-Analysis**:
+    For researchers generating LaTeX tables and statistical summaries for manuscripts, the `meta/` directory contains standalone CLI tools:
+    - **`agreement_3sets_cli_v1.4.py`**: Generates 3-run agreement statistics (Perfect, Uncertain, Contradiction), stratified by relevance and off-topic status, outputting Elsevier-formatted LaTeX tables with Wilson 95% Confidence Intervals. This can also be seen via the Agreement Report in Batch Tools.
+    - **`agreement_human_cli_v1.4.py`**: Compares the AI database against a user-modified database to generate "Human-AI Alignment Summary" tables (Exact Match, Conflict, AI Overconfidence, etc.).
+
+7.  **Architecture & Concurrency**:
+    - **Smart Admission Control**: The Queue Manager features a "Homogeneous vs. Mixed" concurrency logic. It groups identical task types together to prevent vLLM context-switching penalties, maximizing throughput during large batch operations.
+    - **Production vs. Dev**: Both `browse_db.py` and `queue_manager.py` use **Waitress** for production serving, and Flask's dev server for debugging (controlled by `DEBUG_MODE` in `config.py`).
 ---
 
 

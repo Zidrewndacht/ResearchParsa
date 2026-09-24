@@ -1,0 +1,208 @@
+# ==============================================================================
+# DOMAIN CONFIGURATION FILE
+# ==============================================================================
+# Domain: SLR/SMS Automation
+#
+# Target topic:
+#   Papers/tools/systems/surveys that automate or support systematic
+#   literature reviews (SLR) or systematic mapping studies (SMS).
+#
+# This is metadata-based classification:
+#   Only infer from title, abstract, keywords, venue, year, etc.
+#   Do not infer details that usually only appear in the full text.
+# ==============================================================================
+
+domain_name: "SLR/SMS Automation"
+
+# ------------------------------------------------------------------------------
+# EDITABLE TEXT FIELDS (Detail Row)
+# ------------------------------------------------------------------------------
+editable_fields:
+  - label: "Research Area"
+    json_path: "research_area"
+    stats_list: true
+
+  - label: "Model Name"
+    json_path: "technique.model"
+    stats_list: true
+
+  - label: "Other Automated Tasks"
+    json_path: "automation.other"
+
+# ------------------------------------------------------------------------------
+# TABLE COLUMNS & FILTER GROUPS
+# ------------------------------------------------------------------------------
+groups:
+  # ============================================================================
+  # HIGH-LEVEL PAPER TYPE / REVIEW AUTOMATION TARGET
+  # ============================================================================
+
+  - name: "survey"
+    friendly_name: ""
+    filter_type: tri_state
+    json_path: "is_survey"
+    label: "Survey"
+    header_class: "inferred-header"
+
+  - name: "slr"
+    friendly_name: ""
+    filter_type: tri_state
+    json_path: "review_focus.slr"
+    label: "SLR"
+    header_class: "inferred-header"
+
+  - name: "sms"
+    friendly_name: ""
+    filter_type: tri_state
+    json_path: "review_focus.sms"
+    label: "SMS"
+    header_class: "inferred-header"
+
+  # ============================================================================
+  # KITCHENHAM-STYLE AUTOMATED STAGES
+  # ============================================================================
+
+  - name: "kitchenham_stages"
+    friendly_name: "SLR Stages"
+    filter_type: inclusion
+    json_path: "automation.kitchenham_stages"
+    header_class: "inferred-header-2"
+    fields:
+      - key: "planning_protocol"
+        label: "Planning"
+        highlight: true
+
+      - key: "identification_of_research"
+        label: "Search"
+        highlight: true
+
+      - key: "selection_of_studies"
+        label: "Selection"
+        highlight: true
+
+      - key: "quality_assessment"
+        label: "QA"
+
+      - key: "data_extraction"
+        label: "Extraction"
+        highlight: true
+
+      - key: "data_synthesis"
+        label: "Synthesis"
+        highlight: true
+
+      - key: "reporting_dissemination"
+        label: "Reporting"
+
+      - key: "living_update"
+        label: "Living"
+
+  # ============================================================================
+  # SMS-SPECIFIC AUTOMATION
+  # ============================================================================
+  # SMS/mapping papers often mention keywording, topic modeling, classification
+  # schemes, evidence maps, bibliometric maps, or visualization.
+  # ============================================================================
+
+  - name: "sms_specific"
+    friendly_name: "SMS"
+    filter_type: inclusion
+    json_path: "automation.sms_specific"
+    header_class: "inferred-header-2"
+    fields:
+      - key: "keywording_topic_modeling"
+        label: "Keyword/Topic"
+
+      - key: "classification_scheme"
+        label: "Classify"
+
+      - key: "mapping_visualization"
+        label: "Map/Viz"
+
+  # ============================================================================
+  # OTHER AUTOMATED REVIEW TASKS
+  # ============================================================================
+  # Free-text catch-all for metadata-visible automation tasks not covered above.
+  # ============================================================================
+
+  - name: "other_tasks"
+    friendly_name: ""
+    filter_type: inclusion
+    json_path: "automation"
+    header_class: "inferred-header-2"
+    fields:
+      - key: "other"
+        label: "Other"
+        render_type: text_presence
+        highlight: true
+
+  # ============================================================================
+  # TECHNIQUE / METHOD FAMILY
+  # ============================================================================
+
+  - name: "techniques"
+    friendly_name: "Techniques"
+    filter_type: none
+    json_path: "technique"
+    header_class: "inferred-header-3"
+    fields:
+      - key: "rule_based"
+        label: "Rules"
+
+      - key: "traditional_ml"
+        label: "Trad ML"
+
+      - key: "deep_learning"
+        label: "Deep Learn"
+
+      - key: "llm_or_transformer"
+        label: "LLM/Transf"
+
+      - key: "information_retrieval"
+        label: "IR/Search"
+
+      - key: "active_learning_or_human_loop"
+        label: "Active/HITL"
+
+      - key: "hybrid"
+        label: "Hybrid"
+
+  # ============================================================================
+  # DATASET / CODE AVAILABILITY
+  # ============================================================================
+
+  - name: "dataset"
+    friendly_name: ""
+    filter_type: tri_state
+    json_path: "technique.available_dataset"
+    label: "Datasets"
+    header_class: "inferred-header-3"
+
+  - name: "code"
+    friendly_name: ""
+    filter_type: tri_state
+    json_path: "technique.available_code"
+    label: "Code"
+    header_class: "inferred-header-3"
+
+# ------------------------------------------------------------------------------
+# LLM PROMPT TEMPLATES
+# ------------------------------------------------------------------------------
+prompts:
+  classify_instructions: prompt_templates/configurable_classify_instructions.txt
+  classify_output_template: prompt_templates/configurable_classify_output_template.txt
+  few_shot_examples: prompt_templates/configurable_few_shot_examples.txt
+  screening_template: prompt_templates/configurable_screening_template.txt
+
+
+# ------------------------------------------------------------------------------
+# THEME / CSS OVERRIDES
+# ------------------------------------------------------------------------------
+theme:
+  primary_ui_color: "hsl(222, 47%, 33%)"
+  primary_ui_color_darker: "hsl(222, 50%, 29%)"
+  inferred_ui_color: "hsl(258, 42%, 35%)"
+  inferred_gradient_end_color: "rgb(71, 51, 114)"
+  stats_primary_ui_color: "var(--primary-ui-color)"
+  detail_button_background: "linear-gradient(180deg, hsl(222, 25%, 88%) 0%, hsl(222, 33%, 94%) 60%)"
+  history_button_background: "linear-gradient(180deg, hsl(222, 25%, 88%) 0%, hsl(222, 33%, 94%) 60%)"

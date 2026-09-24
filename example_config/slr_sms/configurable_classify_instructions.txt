@@ -1,0 +1,89 @@
+We are classifying papers for the topic: automation of systematic literature reviews (SLR) and systematic mapping studies (SMS).
+
+Given the data from the specific paper at the end, fill in the provided structure exactly and answer with JSON. Do not add, remove, or move any fields.
+
+Read all the paper data once, and:
+
+1. Assign relevance (0-10):
+
+0-1: Unrelated domain and no review automation. Examples: medical treatment review, general education review, finance, biology, software engineering primary study, generic literature without automation.
+2-3: Mentions systematic reviews, mapping studies, screening, or literature management, but automation is absent, extremely weak, or not the focus.
+4-6: General SLR/SMS automation context is present, but metadata lacks clear stage coverage, technique details, or concrete tool/method description.
+7-8: Clearly addresses automation/support for at least one SLR/SMS stage with a recognizable method, tool, or focused survey.
+9-10: Highly specific to SLR/SMS automation, covers multiple stages, proposes a clear platform/tool, or is a comprehensive survey of the area.
+
+Use the range inside each relevance bin: if a paper barely matches the 4-6 bin, set 4; if it almost reaches 7-8 but not quite, set 6.
+
+2. Evaluate is_offtopic:
+
+- If relevance ≤ 2 → set is_offtopic to true. Set all downstream fields to null, except research_area and relevance. Leave automation.other as "".
+- If relevance ≥ 3 → set is_offtopic to false and proceed to fill downstream fields.
+- If the paper is an ordinary SLR/SMS in another domain and does not propose, evaluate, or review automation, it should normally be off-topic.
+- If the paper is a survey about automation of SLR/SMS, it is not off-topic.
+- If the paper describes a tool/system/method for automating any review stage, it is not off-topic.
+
+3. For each tri-state field, ask:
+
+- Is there a direct keyword match? Example: "automated screening" → selection_of_studies: true.
+- Is there a direct keyword exclusion? Example: "manual data extraction only" → data_extraction: false.
+- Is there a semantic match or unambiguous paraphrase? Example: "eligibility assessment" → selection_of_studies: true.
+- Is the task logically incompatible with the described scope? Example: "only search string generation" → data_extraction: false, data_synthesis: false, reporting_dissemination: false, unless other evidence exists.
+- If none of the above apply → set null. When in doubt, prefer null.
+
+For each true/false/null field:
+
+- true: Explicitly stated or unambiguously implied by metadata.
+- false: Explicitly excluded or clearly incompatible with the described scope.
+- null: Ambiguous, missing, too vague, or likely only knowable from full text.
+
+Important metadata-only rule:
+
+We are classifying metadata such as title, abstract, keywords, venue, and year. We are not reading the full paper. Do not assume that a paper contains protocol details, quality checklists, extraction forms, UI details, or full review workflow details unless the metadata explicitly says so.
+
+Field-specific guidance:
+
+review_focus.slr:
+- true if metadata explicitly mentions systematic literature review, systematic review, SLR, or automation clearly aimed at SLRs.
+- false if metadata clearly targets only SMS/mapping or clearly targets a non-SLR task.
+- null if the review type is unclear or generic.
+
+review_focus.sms:
+- true if metadata explicitly mentions systematic mapping study, systematic map, mapping study, evidence mapping, bibliometric mapping, or similar mapping-oriented review automation.
+- false if metadata clearly targets only SLRs.
+- null if unclear.
+
+automation.kitchenham_stages:
+- planning_protocol: planning, protocol generation, protocol evaluation, research question formulation, need for review.
+- identification_of_research: search strategy, query generation, query translation, database search, snowballing, citation chasing, candidate retrieval, deduplication.
+- selection_of_studies: title/abstract screening, full-text screening, eligibility, inclusion/exclusion, prioritization.
+- quality_assessment: quality appraisal, risk of bias, quality checklist, study quality ranking.
+- data_extraction: structured extraction of study characteristics, PICO, metadata extraction, extraction forms.
+- data_synthesis: synthesis support, summarization, evidence aggregation, thematic synthesis, meta-analysis support, mapping synthesis.
+- reporting_dissemination: report writing support, PRISMA support, formatting, dissemination mechanisms.
+- living_update: living review maintenance, update detection, continuous screening, surveillance for new studies.
+
+automation.sms_specific:
+- keywording_topic_modeling: keyword extraction, term mining, topic modeling, LDA, BERTopic, text mining for map construction.
+- classification_scheme: categorizing papers by themes, methods, research questions, venues, years, contribution types, etc.
+- mapping_visualization: evidence maps, bubble plots, heat maps, bibliometric visualization, trend visualization.
+
+automation.other:
+- Use only if the metadata explicitly names another automated SLR/SMS task not covered above.
+- Keep blank if not applicable.
+- Do not write generic words like "automation" or "AI". Name the task.
+
+technique:
+- rule_based: rules, heuristics, ontologies, controlled vocabularies, deterministic pipelines.
+- traditional_ml: SVM, Naive Bayes, Random Forest, logistic regression, clustering, LDA, non-deep ML.
+- deep_learning: CNN, RNN, LSTM, autoencoder, MLP, other non-transformer DL.
+- llm_or_transformer: GPT, ChatGPT, LLM, BERT, RoBERTa, transformer, attention model, LLM embeddings, RAG.
+- information_retrieval: retrieval, ranking, query expansion, search engines, paper recommendation, citation retrieval.
+- active_learning_or_human_loop: active learning, uncertainty sampling, human-in-the-loop, interactive screening, crowdsourced screening.
+- hybrid: true only if different technique families are explicitly combined. Multiple LLMs or multiple DL models alone are not hybrid.
+- model: named model(s), comma-separated. Use "in-house" for an unnamed developed model/system. null if no model applies.
+- available_dataset: true only if public dataset/corpus is explicitly mentioned. false if explicitly private/not released. null otherwise.
+- available_code: true only if public code/tool/repository is explicitly mentioned. false if explicitly private/not released. null otherwise.
+
+Do not let relevance bias your true/false/null decisions for individual fields. Low relevance should be a consequence of missing evidence, not a reason to force fields to false.
+
+Review your choices before giving the final answer.

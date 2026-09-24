@@ -1,0 +1,269 @@
+Title: “Large language models for automated title and abstract screening in systematic reviews”
+Abstract: “We evaluate GPT-4 and a fine-tuned BERT classifier for title/abstract screening in systematic reviews. The system suggests inclusion/exclusion decisions and provides explanations. A public corpus of 20,000 screening decisions is released. Code is available.”
+Keywords: systematic review, screening, LLM, BERT, automation
+{{
+"research_area": "computer sciences",
+"is_offtopic": false,
+"relevance": 9,
+"is_survey": false,
+"review_focus": {{
+  "slr": true,
+  "sms": false
+}},
+"automation": {{
+  "kitchenham_stages": {{
+    "planning_protocol": false,
+    "identification_of_research": false,
+    "selection_of_studies": true,
+    "quality_assessment": false,
+    "data_extraction": false,
+    "data_synthesis": false,
+    "reporting_dissemination": false,
+    "living_update": false
+  }},
+  "sms_specific": {{
+    "keywording_topic_modeling": false,
+    "classification_scheme": false,
+    "mapping_visualization": false
+  }},
+  "other": ""
+}},
+"technique": {{
+  "rule_based": false,
+  "traditional_ml": false,
+  "deep_learning": false,
+  "llm_or_transformer": true,
+  "information_retrieval": false,
+  "active_learning_or_human_loop": null,
+  "hybrid": false,
+  "model": "GPT-4, BERT",
+  "available_dataset": true,
+  "available_code": true
+}}
+}}
+Justification: Explicit systematic review screening automation. Selection/screening is clearly stated. GPT-4/BERT imply llm_or_transformer. Public corpus and code imply available_dataset and available_code.
+---
+Title: “Automated systematic mapping studies using topic modeling and evidence maps”
+Abstract: “We present a pipeline that applies LDA topic modeling and keyword extraction to classify software engineering papers, then generates bubble plots and heat maps for systematic mapping studies. The tool was evaluated on a corpus of 12,000 papers.”
+Keywords: systematic mapping, topic modeling, visualization, evidence map
+{{
+"research_area": "computer sciences",
+"is_offtopic": false,
+"relevance": 8,
+"is_survey": false,
+"review_focus": {{
+  "slr": false,
+  "sms": true
+}},
+"automation": {{
+  "kitchenham_stages": {{
+    "planning_protocol": null,
+    "identification_of_research": null,
+    "selection_of_studies": null,
+    "quality_assessment": false,
+    "data_extraction": true,
+    "data_synthesis": true,
+    "reporting_dissemination": true,
+    "living_update": false
+  }},
+  "sms_specific": {{
+    "keywording_topic_modeling": true,
+    "classification_scheme": true,
+    "mapping_visualization": true
+  }},
+  "other": ""
+}},
+"technique": {{
+  "rule_based": false,
+  "traditional_ml": true,
+  "deep_learning": false,
+  "llm_or_transformer": false,
+  "information_retrieval": false,
+  "active_learning_or_human_loop": false,
+  "hybrid": false,
+  "model": "LDA",
+  "available_dataset": null,
+  "available_code": null
+}}
+}}
+Justification: Clearly SMS-focused. Topic modeling and keyword extraction support keywording_topic_modeling. Classification and map generation support classification_scheme and mapping_visualization. LDA is traditional_ml. Dataset/code availability not explicit.
+---
+Title: “Automation of systematic literature reviews in software engineering: a systematic survey”
+Abstract: “This survey reviews tools and approaches for automating planning protocols, literature search, screening, quality assessment, data extraction, and synthesis. It covers rule-based systems, machine learning, information retrieval, and large language models. No new dataset is released.”
+Keywords: systematic review, automation, survey, screening, extraction
+{{
+"research_area": "software engineering",
+"is_offtopic": false,
+"relevance": 9,
+"is_survey": true,
+"review_focus": {{
+  "slr": true,
+  "sms": null
+}},
+"automation": {{
+  "kitchenham_stages": {{
+    "planning_protocol": true,
+    "identification_of_research": true,
+    "selection_of_studies": true,
+    "quality_assessment": true,
+    "data_extraction": true,
+    "data_synthesis": true,
+    "reporting_dissemination": null,
+    "living_update": null
+  }},
+  "sms_specific": {{
+    "keywording_topic_modeling": null,
+    "classification_scheme": null,
+    "mapping_visualization": null
+  }},
+  "other": ""
+}},
+"technique": {{
+  "rule_based": true,
+  "traditional_ml": true,
+  "deep_learning": null,
+  "llm_or_transformer": true,
+  "information_retrieval": true,
+  "active_learning_or_human_loop": null,
+  "hybrid": null,
+  "model": null,
+  "available_dataset": false,
+  "available_code": null
+}}
+}}
+Justification: Survey of SLR automation. Stage fields are true where the abstract says the survey covers those stages. SMS-specific fields are null because not mentioned. No new dataset means available_dataset false.
+---
+Title: “Effects of exercise on depression in older adults: a systematic review and meta-analysis”
+Abstract: “We conducted a systematic review following PRISMA. We searched PubMed, screened records, assessed quality, extracted data, and synthesized evidence.”
+Keywords: systematic review, meta-analysis, exercise, depression
+{{
+"research_area": "medical",
+"is_offtopic": true,
+"relevance": 1,
+"is_survey": null,
+"review_focus": {{
+  "slr": null,
+  "sms": null
+}},
+"automation": {{
+  "kitchenham_stages": {{
+    "planning_protocol": null,
+    "identification_of_research": null,
+    "selection_of_studies": null,
+    "quality_assessment": null,
+    "data_extraction": null,
+    "data_synthesis": null,
+    "reporting_dissemination": null,
+    "living_update": null
+  }},
+  "sms_specific": {{
+    "keywording_topic_modeling": null,
+    "classification_scheme": null,
+    "mapping_visualization": null
+  }},
+  "other": ""
+}},
+"technique": {{
+  "rule_based": null,
+  "traditional_ml": null,
+  "deep_learning": null,
+  "llm_or_transformer": null,
+  "information_retrieval": null,
+  "active_learning_or_human_loop": null,
+  "hybrid": null,
+  "model": null,
+  "available_dataset": null,
+  "available_code": null
+}}
+}}
+Justification: This is an ordinary systematic review in a medical domain. It mentions review stages, but there is no automation focus, so it is off-topic for SLR/SMS automation.
+---
+Title: “Automated citation screening for systematic reviews using support vector machines”
+Abstract: “We train an SVM classifier to prioritize relevant citations for systematic reviews. The system uses abstract text and MeSH terms. It reduced screening workload in a simulation using 5,000 citations. Dataset available on request.”
+Keywords: citation screening, SVM, systematic review, machine learning
+{{
+"research_area": "computer sciences",
+"is_offtopic": false,
+"relevance": 8,
+"is_survey": false,
+"review_focus": {{
+  "slr": true,
+  "sms": false
+}},
+"automation": {{
+  "kitchenham_stages": {{
+    "planning_protocol": false,
+    "identification_of_research": false,
+    "selection_of_studies": true,
+    "quality_assessment": false,
+    "data_extraction": false,
+    "data_synthesis": false,
+    "reporting_dissemination": false,
+    "living_update": false
+  }},
+  "sms_specific": {{
+    "keywording_topic_modeling": false,
+    "classification_scheme": false,
+    "mapping_visualization": false
+  }},
+  "other": ""
+}},
+"technique": {{
+  "rule_based": false,
+  "traditional_ml": true,
+  "deep_learning": false,
+  "llm_or_transformer": false,
+  "information_retrieval": false,
+  "active_learning_or_human_loop": null,
+  "hybrid": false,
+  "model": "SVM",
+  "available_dataset": false,
+  "available_code": null
+}}
+}}
+Justification: Citation screening for systematic reviews is selection_of_studies. SVM is traditional_ml. Dataset available on request is not an explicit public dataset, so available_dataset is false or null depending on strictness; here false because it is not openly provided.
+---
+Title: “AI writing assistants for narrative literature reviews”
+Abstract: “We explore how ChatGPT can help researchers summarize papers and draft narrative literature reviews.”
+Keywords: ChatGPT, academic writing, literature review, summarization
+{{
+"research_area": "computer sciences",
+"is_offtopic": null,
+"relevance": 3,
+"is_survey": false,
+"review_focus": {{
+  "slr": null,
+  "sms": null
+}},
+"automation": {{
+  "kitchenham_stages": {{
+    "planning_protocol": null,
+    "identification_of_research": null,
+    "selection_of_studies": null,
+    "quality_assessment": null,
+    "data_extraction": null,
+    "data_synthesis": true,
+    "reporting_dissemination": true,
+    "living_update": null
+  }},
+  "sms_specific": {{
+    "keywording_topic_modeling": null,
+    "classification_scheme": null,
+    "mapping_visualization": null
+  }},
+  "other": ""
+}},
+"technique": {{
+  "rule_based": false,
+  "traditional_ml": false,
+  "deep_learning": false,
+  "llm_or_transformer": true,
+  "information_retrieval": false,
+  "active_learning_or_human_loop": false,
+  "hybrid": false,
+  "model": "ChatGPT",
+  "available_dataset": null,
+  "available_code": null
+}}
+}}
+Justification: This is borderline. It mentions AI assistance for literature reviews, but not systematic reviews or systematic mapping specifically. It is not obviously off-topic because it touches review synthesis/reporting, so is_offtopic is null. Relevance remains low because the systematic-review workflow is not explicit.

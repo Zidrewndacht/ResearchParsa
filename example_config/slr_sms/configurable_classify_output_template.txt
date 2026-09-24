@@ -1,0 +1,46 @@
+research_area: null   # broad area: computer sciences, information science, software engineering, health informatics, medical, education, etc. May be inferred from title, abstract, keywords, venue, or year. If the paper is mainly about review automation methods, prefer computer sciences / information science / software engineering. If it is mainly an applied review in another domain with no automation focus, it is likely off-topic.
+is_offtopic: null     # We are looking for papers that automate, support, or review automation of systematic literature reviews (SLR) or systematic mapping studies (SMS). This includes tools, pipelines, LLM/NLP/ML/IR methods, decision-support systems, and surveys about such automation. Off-topic examples: ordinary SLR/SMS papers that merely conduct a review in some domain without proposing/supporting automation; generic academic writing assistants; general literature summarization not tied to systematic review workflows; unrelated domain applications. When offtopic, answer null for all downstream classification fields except research_area and relevance, and leave automation.other empty.
+relevance: 6          # Integer 0-10 estimating relevance to SLR/SMS automation. 0 = completely irrelevant, 10 = highly specific and central.
+is_survey: null       # true for surveys/reviews of SLR/SMS automation; false for implementation/tool/method papers; null if unclear. Ordinary domain-specific SLRs are usually off-topic unless their focus is automation itself.
+review_focus:
+  slr: null           # true if the automation/support explicitly targets systematic literature reviews / systematic reviews; false if clearly does not; null if unclear.
+  sms: null           # true if the automation/support explicitly targets systematic mapping studies / systematic maps; false if clearly does not; null if unclear. A paper may support both SLR and SMS.
+automation:
+  kitchenham_stages:  # true/false/null. Use only metadata-visible evidence from title, abstract, keywords, venue, etc.
+    planning_protocol: null          # planning the review: need for review, research questions, review protocol, protocol generation/checking/evaluation.
+    identification_of_research: null # searching/identification: search strategy, query generation/query translation, database searching, citation chasing, snowballing, retrieval of candidate studies, deduplication.
+    selection_of_studies: null       # selection/screening: title/abstract screening, full-text screening, eligibility, inclusion/exclusion decisions, prioritization of records.
+    quality_assessment: null         # study quality assessment, risk of bias, quality checklists, study appraisal, quality-based filtering.
+    data_extraction: null            # data extraction: extracting metadata, PICO-like fields, study characteristics, extraction forms, structured extraction from papers.
+    data_synthesis: null             # data synthesis: evidence synthesis, summarization, aggregation, thematic synthesis, meta-analysis support, mapping/synthesis for SMS.
+    reporting_dissemination: null    # reporting/dissemination: report generation, writing support, PRISMA support, formatting main report, dissemination mechanisms.
+    living_update: null              # living reviews/update monitoring: continuous surveillance, new-study detection, living systematic review maintenance, update pipelines.
+  sms_specific:       # true/false/null. Specific to systematic mapping / mapping-style reviews.
+    keywording_topic_modeling: null  # keyword extraction, term mining, topic modeling, LDA/BERTopic-like topic discovery, text mining for mapping purposes.
+    classification_scheme: null      # classifying/categorizing studies into facets, themes, research questions, contribution types, methods, venues, years, etc.
+    mapping_visualization: null      # evidence maps, bubble plots, heat maps, bibliometric maps, visualization of publication trends, mapping dashboards.
+  other: ""           # String. Only if metadata explicitly mentions another automated SLR/SMS task not covered above. Keep blank otherwise.
+technique:            # true/false/null for booleans. Identify techniques used by an implementation, or techniques reviewed by a survey.
+  rule_based: null                 # rules, heuristics, regular expressions, controlled vocabularies, ontologies, deterministic workflows.
+  traditional_ml: null             # non-deep ML: SVM, Naive Bayes, Random Forest, logistic regression, clustering, LDA/topic models unless explicitly neural, etc.
+  deep_learning: null              # non-transformer deep learning: CNN, RNN, LSTM, autoencoder, MLP, etc. Set false if the only mentioned method is LLM/transformer and no other DL is stated.
+  llm_or_transformer: null         # LLMs, ChatGPT/GPT, BERT/RoBERTa/transformers, attention models, sentence embeddings from transformer models, prompt-based screening/extraction, RAG with LLM.
+  information_retrieval: null      # search engines, ranking, retrieval, query expansion, citation retrieval, similarity search, recommender systems for papers, database/search automation.
+  active_learning_or_human_loop: null # active learning, uncertainty sampling, human-in-the-loop, interactive screening, crowd screening, expert feedback loops.
+  hybrid: null                     # true if explicitly combining different technique families above, e.g. rules + ML, IR + LLM, traditional ML + human loop. If only multiple LLMs or multiple DL models, keep false.
+  model: null                      # model name or comma-separated list if clearly named: GPT-4, ChatGPT, BERT, SVM, LDA, etc. Use "in-house" if an unnamed ML/LLM/NLP system is developed in the paper. null if no model applies.
+  available_dataset: null          # true if a public corpus/dataset is explicitly provided; false if explicitly private/not shared; null if not mentioned.
+  available_code: null             # true if public code/tool/repository is explicitly mentioned; false if explicitly private/not released; null if not mentioned.
+
+# METADATA-ONLY HARD RULES:
+# - Use only information visible in title, abstract, keywords, venue, year, and other provided metadata.
+# - Do not infer full-text-only details.
+# - If a field is not clearly supported by metadata, set null.
+# - For surveys, set stage/technique fields to true if the survey explicitly says it covers those stages/techniques.
+# - For implementations, set stage/technique fields to true only if the paper metadata clearly says the system performs/supports them.
+
+# ERA SANITY RULES:
+# - If publication year is known and <2013, llm_or_transformer should normally be false unless an impossible anomaly is explicitly stated.
+# - Transformers are only plausible from 2017 onward.
+# - Modern LLMs such as GPT/BERT/ChatGPT are only plausible from 2018 onward, and especially from 2020 onward.
+# - Do not guess LLM/transformer use merely because the paper uses generic terms like "machine learning" or "AI".

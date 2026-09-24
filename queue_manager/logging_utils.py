@@ -31,8 +31,17 @@ def log_file_dispatch(task_id, task_type, paper_id, set_num):
 def log_file_complete(task_id, task_type, success, model_name=None, error=None):
     _log_to_file('tasks.log', event='complete', task_id=task_id, task_type=task_type, success=success, model_name=model_name, error=error)
 
-def log_file_error(context, error, task_id=None, paper_id=None, set_num=None):
-    _log_to_file('errors.log', event='error', context=context, error=str(error), task_id=task_id, paper_id=paper_id, set_num=set_num)
+def log_file_error(context, error, task_id=None, paper_id=None, set_num=None, **fields):
+    _log_to_file(
+        'errors.log',
+        event='error',
+        context=context,
+        error=str(error),
+        task_id=task_id,
+        paper_id=paper_id,
+        set_num=set_num,
+        **fields
+    )
 
 def log_file_request(endpoint, client, mode, paper_id=None):
     _log_to_file('requests.log', event='request', endpoint=endpoint, client=client, mode=mode, paper_id=paper_id)
