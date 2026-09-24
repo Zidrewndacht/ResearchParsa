@@ -20,25 +20,30 @@ if errorlevel 1 (
     goto :wait_engine
 )
 
+:: --max-num-batched-tokens 4096  required to allow for ENABLE_PREFIX_CACHING, otherwise disabled by default for Qwen3.5
+::  --kv_cache_dtype fp8_e4m3 removed because the new screening task doesn't saturate KV anyway, seems limited by PP speed
+
 docker run --rm -it --gpus all ^
   -e ENABLE_PREFIX_CACHING=1 ^
-  -e HF_HUB_OFFLINE=0 ^
+  -e HF_HUB_OFFLINE=1 ^
   -v /mnt/host/d/AI/weights/vLLM/HuggingFaceCache:/root/.cache/huggingface ^
   -p 127.0.0.1:8086:8086 --ipc=host ^
-    vllm/vllm-openai:v0.28.0-x86_64-cu129-ubuntu2404 ^
-    cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit ^
-    --host 0.0.0.0 --port 8086 ^
-    --max-num-seqs 128 ^
-    --max-num-batched-tokens 4096 ^
-    --enable-prefix-caching ^
-    --enable-expert-parallel ^
-    --language-model-only ^
-    --pipeline-parallel-size 2 ^
-    --gpu-memory-utilization 0.94 ^
-    --reasoning-parser qwen3 ^
-    --max_model_len 81920 ^
-    --no-ray ^
-    --disable_custom_all_reduce ^
-    --compilation-config "{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\"}"
+  vllm/vllm-openai:v0.28.0-x86_64-cu129-ubuntu2404 ^
+  cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit ^
+  --host 0.0.0.0 --port 8086 ^
+  --max-num-seqs 48 ^
+  --max-num-batched-tokens 4096 ^
+  --enable-prefix-caching ^
+  --enable-expert-parallel ^
+  --language-model-only ^
+  --tensor-parallel-size 2 ^
+  --gpu-memory-utilization 0.93 ^
+  --reasoning-parser qwen3 ^
+  --max_model_len 81920 ^
+  --disable_custom_all_reduce ^
+  --safetensors-load-strategy=prefetch ^
+  --no-ray ^
+  --compilation-config "{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\"}" ^
+  --speculative-config "{\"method\":\"mtp\",\"num_speculative_tokens\":2}"
 pause
 

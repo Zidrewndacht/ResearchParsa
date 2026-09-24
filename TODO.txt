@@ -306,19 +306,6 @@ OK      Update requirements: ruff, pytest, pytest-cov, pytest-xdist,
 
 OK      fix backup test side effect: backup_before_restore.parsa.tzst is inadvertently replaced by test backup via side effect.
 
-        Add sequential onboarding with LLM usage for prompted domain_config creation?
-                Use a complete separate Flask app -- avoids unnecessary changes to perfectly working webapp for something used rarely.
-                Start with PCB AOI defaults for manual edit/setup if no LLM available.
-                Show the default domain_config.yaml to be edited (except color scheme, set separately) and direct config for LLM server url and API key
-                Apply LLM config. If not configured or unavailable, let settings be set manually
-                If LLM is available and working:
-                        propose 5 color schemes (default + 4 generated ones) and 3 domain_config.yaml column sets, user edits/approves one, then:
-                        propose 3 classify_instructions, 3 classify_outputs, 3 sets of few-shot examples, all at once based on the built domain_config;      
-                Apply (autostarts main process, which itself finds DB is missing, creates it and shows the table with the placeholder article and import buttons)
-                Maybe use a curated list of color schemes instead of generated ones?
-
-        Add optional stats page layout with no domain-specific fields (RP-Lite based?) + enable/disable option in domain_config.yaml
-
 OK      Add a button in history for agent trace review report: reads the complete log stream (from oldest to newest per set) from all sets and reports issues/explains conflicts across sets, etc.
 OK              Adds a colored entry in the main log with the report but does NOT recalculates main set.
                 Improve data format/frontend to better show a TL;DR of the trace review
@@ -332,6 +319,21 @@ OK              Probably gone after SSR > SPA refactor anyway
 OK      Add a manual fast screening pass (to be used with a simpler model, prefer false positives)
                 This is NOT included in automated classify to consensus because it's meant for a separate model -- and orchestration of those is currently out-of-scope:
                         ResearchParça simply assumes the model provided by the endpoint is the one to be used.
+
+        Add sequential onboarding with LLM usage for prompted domain_config creation?
+                Use a complete separate Flask app -- avoids unnecessary changes to perfectly working webapp for something used rarely.
+                Start with PCB AOI defaults for manual edit/setup if no LLM available.
+                Show the default domain_config.yaml to be edited (except color scheme, set separately) and direct config for LLM server url and API key
+                Apply LLM config. If not configured or unavailable, let settings be set manually
+                If LLM is available and working:
+                        propose 5 color schemes (default + 4 generated ones) and 3 domain_config.yaml column sets, user edits/approves one, then:
+                        propose 3 classify_instructions, 3 classify_outputs, 3 sets of few-shot examples, all at once based on the built domain_config;      
+                Apply (autostarts main process, which itself finds DB is missing, creates it and shows the table with the placeholder article and import buttons)
+                Maybe use a curated list of color schemes instead of generated ones?
+
+        Add optional stats page layout with no domain-specific fields (RP-Lite based?) + enable/disable option in domain_config.yaml
+
+        Add import feedback, allow to import multiple files at once;
 
         Add further automation functionality:
                 Automatic de-annualize conferences on import onto a separate DB field (to be used for more reliable stats generation) 

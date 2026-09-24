@@ -46,17 +46,15 @@ screening_llm_params:
       preserve_thinking: false
 
 # Concurrency Limits - example values for 2x24GB on Qwen3.6 27B vLLM 0.28
-# Might improve that by using some sort of vLLM metrics to dynamically adjust?
 max_concurrent_workers_classify: 120
 max_concurrent_workers_verify: 128
 max_concurrent_workers_reclassify: 112
 min_concurrent_workers: 112
 
-# Screening is tiny + thinking-disabled + smaller model, so it gets a much larger lane than classify 
-# except scaling doesn't favour that seemingly due to prefill-bound operation:
+# Screening is tiny + thinking-disabled + smaller model, it becomes a prefill-bound operation:
 # This can be potentially faster with data parallel instead?
-max_concurrent_workers_screen: 100 
+max_concurrent_workers_screen: 48 
 
 # Consensus limits:
-max_consensus_iterations: 8
-fresh_classify_fallback_iteration: 4
+max_consensus_iterations: 10
+fresh_classify_fallback_iteration: 5
