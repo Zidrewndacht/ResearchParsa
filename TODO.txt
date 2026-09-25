@@ -320,6 +320,8 @@ OK      Add a manual fast screening pass (to be used with a simpler model, prefe
                 This is NOT included in automated classify to consensus because it's meant for a separate model -- and orchestration of those is currently out-of-scope:
                         ResearchParça simply assumes the model provided by the endpoint is the one to be used.
 
+        Force full classification of all sets when screening returns uncertain off-topic (e.g. YUU, YYU)
+
         Add sequential onboarding with LLM usage for prompted domain_config creation?
                 Use a complete separate Flask app -- avoids unnecessary changes to perfectly working webapp for something used rarely.
                 Start with PCB AOI defaults for manual edit/setup if no LLM available.

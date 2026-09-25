@@ -206,7 +206,16 @@ class VerificationStateMachine:
 
 class ConsensusStateMachine:
     """State machine for classify-until-consensus on a single paper/set."""
-    def __init__(self, paper_id, set_num, classify_template, verify_template, reclassify_template, model_alias):
+    def __init__(
+        self,
+        paper_id,
+        set_num,
+        classify_template,
+        verify_template,
+        reclassify_template,
+        model_alias,
+        force_initial_classify=False
+    ):
         self.paper_id = paper_id
         self.set_num = set_num
         self.classify_template = classify_template
@@ -220,12 +229,22 @@ class ConsensusStateMachine:
         self.completion_callback = None
         self.lock = threading.Lock()
 
+        self.force_initial_classify = force_initial_classify
+
     def get_next_task(self):
         """Determine next task based on current paper state."""
         paper = db.get_paper_by_id(self.paper_id)
-        if not paper: return None
-        if self.iteration >= self.max_iterations: return None
-        
+        if not paper:
+            return None
+
+        if self.iteration >= self.max_iterations:
+            return None
+
+        if self.force_initial_classify:
+            self.force_initial_classify = False
+            self.current_task_type = TASK_CLASSIFY
+            return self._create_classify_task(paper)
+
         # 1. Load the raw LLM blob
         raw_llm_data = paper.get(f'set_{self.set_num}_llm')
         try:

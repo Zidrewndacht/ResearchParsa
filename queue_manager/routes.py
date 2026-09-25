@@ -226,12 +226,29 @@ def handle_consensus_route():
 
     if mode == 'id' and paper_id:
         log(f"Single paper consensus: {paper_id} (3 sets)")
+
+        paper = db.get_paper_by_id(paper_id)
+        if not paper:
+            return jsonify({'status': 'error', 'message': 'Paper not found'}), 404
+
+        try:
+            main_class = json.loads(paper.get('classification') or '{}')
+        except Exception:
+            main_class = {}
+
+        force_initial_classify = main_class.get('is_offtopic') is None
+
         completion_events = [threading.Event() for _ in range(3)]
+
         for set_num in [1, 2, 3]:
             sm = ConsensusStateMachine(
-                paper_id, set_num,
-                classify_template, verify_template, reclassify_template,
-                model_alias
+                paper_id,
+                set_num,
+                classify_template,
+                verify_template,
+                reclassify_template,
+                model_alias,
+                force_initial_classify=force_initial_classify
             )
             def make_callback(set_n, event):
                 def callback(pid, sn, success):
@@ -255,31 +272,43 @@ def handle_consensus_route():
         # 1. STRICT DB PHASE
         with db.get_db() as conn:
             cursor = conn.cursor()
+
             cursor.execute("""
-                SELECT id, 1 as set_num FROM papers 
-                WHERE set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL 
-                    OR json_extract(set_1_llm, '$.verified') IS NULL 
-                    OR json_extract(set_1_llm, '$.verified') IN (0, 'false', 'False') 
-                    OR (json_extract(set_1_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_1_llm, '$.estimated_score') <= 7)
-                
-                UNION ALL 
-                
-                SELECT id, 2 as set_num FROM papers 
-                WHERE set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL 
-                    OR json_extract(set_2_llm, '$.verified') IS NULL 
-                    OR json_extract(set_2_llm, '$.verified') IN (0, 'false', 'False') 
-                    OR (json_extract(set_2_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_2_llm, '$.estimated_score') <= 7)
-                
-                UNION ALL 
-                
-                SELECT id, 3 as set_num FROM papers 
-                WHERE set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL 
-                    OR json_extract(set_3_llm, '$.verified') IS NULL 
-                    OR json_extract(set_3_llm, '$.verified') IN (0, 'false', 'False') 
-                    OR (json_extract(set_3_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_3_llm, '$.estimated_score') <= 7)
-                
+                SELECT id
+                FROM papers
+                WHERE json_extract(classification, '$.is_offtopic') IS NULL
+            """)
+            main_null_ids = {row[0] for row in cursor.fetchall()}
+
+            cursor.execute("""
+                SELECT id, 1 as set_num FROM papers
+                WHERE set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL
+                   OR json_extract(set_1_llm, '$.verified') IS NULL
+                   OR json_extract(set_1_llm, '$.verified') IN (0, 'false', 'False')
+                   OR (json_extract(set_1_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_1_llm, '$.estimated_score') <= 7)
+                   OR json_extract(classification, '$.is_offtopic') IS NULL
+
+                UNION ALL
+
+                SELECT id, 2 as set_num FROM papers
+                WHERE set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL
+                   OR json_extract(set_2_llm, '$.verified') IS NULL
+                   OR json_extract(set_2_llm, '$.verified') IN (0, 'false', 'False')
+                   OR (json_extract(set_2_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_2_llm, '$.estimated_score') <= 7)
+                   OR json_extract(classification, '$.is_offtopic') IS NULL
+
+                UNION ALL
+
+                SELECT id, 3 as set_num FROM papers
+                WHERE set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL
+                   OR json_extract(set_3_llm, '$.verified') IS NULL
+                   OR json_extract(set_3_llm, '$.verified') IN (0, 'false', 'False')
+                   OR (json_extract(set_3_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_3_llm, '$.estimated_score') <= 7)
+                   OR json_extract(classification, '$.is_offtopic') IS NULL
+
                 ORDER BY id, set_num
             """)
+
             paper_set_pairs = cursor.fetchall()
         # --- DB CONNECTION RELEASED HERE ---
         
@@ -292,10 +321,15 @@ def handle_consensus_route():
         total_tasks = 0
         for pid, set_num in paper_set_pairs:
             sm = ConsensusStateMachine(
-                pid, set_num,
-                classify_template, verify_template, reclassify_template,
-                model_alias
+                pid,
+                set_num,
+                classify_template,
+                verify_template,
+                reclassify_template,
+                model_alias,
+                force_initial_classify=(pid in main_null_ids)
             )
+
             task = sm.get_next_task()
             if task:
                 state.enqueue(task)
