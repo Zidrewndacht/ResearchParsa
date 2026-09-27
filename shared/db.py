@@ -243,10 +243,24 @@ def fetch_papers(hide_offtopic=True, year_from=None, year_to=None, min_page_coun
         params = []
         
         if hide_offtopic:
-            # Bulletproof JSON boolean check: 
-            # Handles SQL NULL, JSON null, integer 0, string '0', and string 'false'
-            conditions.append("(json_extract(p.classification, '$.is_offtopic') IS NULL OR json_extract(p.classification, '$.is_offtopic') IN (0, '0', 'false', 'False'))")
-            
+            # Hide only YYY-confirmed off-topic papers.
+            #
+            # classification.is_offtopic == true alone is not enough, because a YYN
+            # conflict also averages to true. Require solid certainty as well.
+            #
+            # Kept visible:
+            #   - YYN conflicts
+            #   - YNN conflicts
+            #   - unknown/null off-topic state
+            #   - non-solid majority-yes states
+            conditions.append(
+                """
+                NOT (
+                    LOWER(COALESCE(CAST(json_extract(p.classification, '$.is_offtopic') AS TEXT), '0')) IN ('1', 'true')
+                    AND COALESCE(CAST(json_extract(p.main_certainty, '$.is_offtopic') AS TEXT), '') = 'solid'
+                )
+                """
+            )
         if year_from is not None:
             try: conditions.append("p.year >= ?"); params.append(int(year_from))
             except: pass

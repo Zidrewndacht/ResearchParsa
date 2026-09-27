@@ -39,10 +39,14 @@ const papersStore = (() => {
 
         // Export-only server-side mirrors (year, page count, offtopic)
         if (state.isExport) {
-            if (state.hideOfftopic) {   // For offtopic, we prefer to keep conflicts visible together with on-topic and unknown:
+            if (state.hideOfftopic) {
+                // Hide only YYY-confirmed off-topic papers.
+                //
+                // true + solid means all three runs agree on off-topic.
+                // YYN/YNN conflicts, unknowns, and non-solid results stay visible.
                 const certMap = paper.main_certainty || {};
-                const isoCert = certMap['is_offtopic'] || 'solid';
-                if (isoCert !== 'conflict' && _getBool(c, 'is_offtopic') === true) return false;
+                const isoCert = certMap['is_offtopic'] || '';
+                if (isoCert === 'solid' && _getBool(c, 'is_offtopic') === true) return false;
             }
             if (state.minPageCount > 0) {
                 const pc = paper.page_count;

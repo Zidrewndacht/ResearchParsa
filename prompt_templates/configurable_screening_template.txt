@@ -12,7 +12,7 @@ Assess the paper and answer the fields in EXACTLY this order (the area and relev
    4-6: General PCB/AOI context but lacks specific defect types, implementation details, or clear optical focus.
    7-8: Directly addresses optical defect detection on PCBs/PCBAs with clear implementation or focused survey.
    9-10: State-of-the-art optical AOI for PCBs, comprehensive coverage, or highly specific to the target domain.
-3. is_offtopic: true ONLY if the paper is obviously and unambiguously off-topic (relevance ≤ 3, no realistic chance of being relevant). Otherwise false when clearyly on-topic or null when unsure.
+3. is_offtopic: true ONLY if the paper is obviously and unambiguously off-topic (relevance ≤ 3, no realistic chance of being relevant). Otherwise false when clearly on-topic or null when unsure.
 
 Be EXTREMELY conservative:
 - Flag as off-topic ONLY when clearly, unmistakably outside the target area.
