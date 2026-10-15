@@ -4,20 +4,38 @@ make_subset.py
 
 Create a reproducible random subset of the ResearchParsa `papers` table.
 
-Important:
-  Only entries with type 'article' or 'inproceedings' are considered.
-  All other types are removed before sampling.
+Guarantees
+----------
+* Only `article` and `inproceedings` entries are eligible.
+  This filter is applied BEFORE stratification, quota checks and sampling.
+* Exactly --n papers are written, or the script fails with a clear error.
+* Sampling is deterministic for a given --seed (SHA-256 ordering).
 
-Default stratification preserves the ontopic/offtopic distribution of the
-eligible source papers.
+Sampling modes
+--------------
+1. Proportional (default)
+     --n 2000
+   Preserves the eligible source on-topic / off-topic ratio.
 
-Off-topic definition defaults to the same rule used by the web UI's
-hide_offtopic filter:
+2. Quota mode (fixed on-topic stratum)
+     --n 2000 --ontopic 200
+   Exactly 200 on-topic papers. The remaining 1800 are allocated
+   proportionally across the OTHER strata.
 
+     --ontopic 200 --offtopic 1800
+   Both strata fixed; --n is inferred as 2000.
+
+3. Unstratified
+     --n 2000 --no-stratify
+   Simple reproducible random sample of the eligible papers.
+
+Off-topic definition (default, matches the UI hide_offtopic filter)
+-----------------------------------------------------------------
     classification.is_offtopic == true
     AND main_certainty.is_offtopic == 'solid'
 
-Everything else is treated as on-topic.
+Everything else counts as on-topic. Use --label-mode strict with
+--unknown drop if you only want confidently classified papers.
 
 Uses only the Python standard library.
 """
@@ -35,14 +53,17 @@ PLACEHOLDER_TITLE = (
     "Database is missing or empty. Import BibTeX or restore from a backup to start working"
 )
 
-# Only these BibTeX entry types are allowed in the subset.
-# This filter is applied BEFORE sampling.
+# Applied BEFORE sampling. Nothing else can ever reach the output database.
 ALLOWED_TYPES = {"article", "inproceedings"}
 
 TRUE_STRINGS = {"1", "true", "yes", "on"}
 FALSE_STRINGS = {"0", "false", "no", "off"}
 NULL_STRINGS = {"", "null", "none", "unknown"}
 
+
+# --------------------------------------------------------------------------
+# Label handling
+# --------------------------------------------------------------------------
 
 def parse_json_blob(raw):
     """Parse a JSON blob column safely."""
@@ -58,10 +79,7 @@ def parse_json_blob(raw):
 
 
 def tri_state(value):
-    """
-    Normalize an LLM/database boolean-ish value into:
-      'true', 'false', 'null', or 'unusable'
-    """
+    """Normalize a boolean-ish LLM value to 'true' / 'false' / 'null' / 'unusable'."""
     if value is True:
         return "true"
     if value is False:
@@ -91,25 +109,12 @@ def tri_state(value):
 
 def label_paper(classification, certainty, label_mode):
     """
-    Assign each paper to a sampling stratum.
+    Assign a paper to a sampling stratum.
 
-    Modes:
-      app:
-        Matches the web UI hide_offtopic rule.
-        offtopic = solid true
-        everything else = ontopic
-
-      majority:
-        Uses the stored averaged classification directly.
-        true  -> offtopic
-        false -> ontopic
-        null/unusable -> unknown
-
-      strict:
-        Requires solid certainty for both true and false.
-        solid true  -> offtopic
-        solid false -> ontopic
-        otherwise   -> unknown
+    app:      solid true -> offtopic; everything else -> ontopic
+              (matches the UI's hide_offtopic rule)
+    majority: true -> offtopic, false -> ontopic, else unknown
+    strict:   solid true -> offtopic, solid false -> ontopic, else unknown
     """
     verdict = tri_state(classification.get("is_offtopic"))
     cert = str((certainty or {}).get("is_offtopic", "")).strip().lower()
@@ -132,12 +137,16 @@ def label_paper(classification, certainty, label_mode):
     return "unknown"
 
 
+# --------------------------------------------------------------------------
+# Reproducible sampling
+# --------------------------------------------------------------------------
+
 def deterministic_sample(ids, k, seed):
     """
     Deterministically sample k IDs without replacement.
 
-    Uses SHA-256 ordering instead of Python's random module so the result
-    is stable across machines and Python runs.
+    SHA-256 ordering is used instead of Python's random module so results
+    are stable across machines, Python versions and runs.
     """
     if k <= 0:
         return []
@@ -152,22 +161,24 @@ def deterministic_sample(ids, k, seed):
 
 def proportional_allocation(group_sizes, n):
     """
-    Allocate n samples across groups proportionally to group sizes.
+    Allocate n across groups in proportion to their sizes.
 
-    Uses the largest remainder method so the total is exactly n.
+    Largest-remainder method with deterministic tie-breaking, so the sum
+    is exactly n and no group is over-allocated.
     """
     total = sum(group_sizes.values())
     if total == 0:
         return {}
     if n >= total:
         return dict(group_sizes)
+    if n <= 0:
+        return {g: 0 for g in group_sizes}
 
     raw = {g: size * n / total for g, size in group_sizes.items() if size > 0}
     floors = {g: int(raw[g]) for g in raw}
     counts = dict(floors)
     remainder = n - sum(counts.values())
 
-    # Largest remainder, deterministic tie-break by group name.
     order = sorted(raw, key=lambda g: (-(raw[g] - floors[g]), g))
 
     i = 0
@@ -184,45 +195,130 @@ def proportional_allocation(group_sizes, n):
     return counts
 
 
-def percent(count, total):
-    if not total:
-        return 0.0
-    return round(100.0 * count / total, 2)
+def resolve_targets(population, n, ontopic_wanted, offtopic_wanted):
+    """
+    Return (targets, mode).
 
+    Quota mode is active if either --ontopic or --offtopic was supplied.
+    Fixed quotas are honored EXACTLY; the remaining budget is distributed
+    proportionally over all other strata (including 'unknown', if present).
+
+    A quota of 0 is meaningful and is honored (it is not treated as 'unset').
+    """
+    has_quota = ontopic_wanted is not None or offtopic_wanted is not None
+
+    if not has_quota:
+        if n > sum(population.values()):
+            sys.exit(
+                f"--n={n} exceeds the eligible population "
+                f"({sum(population.values())}) after the type filter."
+            )
+        return proportional_allocation(population, n), "proportional"
+
+    targets = {}
+    fixed_total = 0
+
+    for label, wanted in (("ontopic", ontopic_wanted), ("offtopic", offtopic_wanted)):
+        if wanted is None:
+            continue
+        if wanted < 0:
+            sys.exit(f"--{label} must be >= 0, got {wanted}")
+
+        available = population.get(label, 0)
+        if wanted > available:
+            sys.exit(
+                f"--{label}={wanted} cannot be satisfied: only {available} "
+                f"eligible '{label}' papers exist after filtering "
+                f"(label-mode and --unknown handling applied). "
+                f"Requested subset size is --n={n}."
+            )
+
+        targets[label] = wanted
+        fixed_total += wanted
+
+    if fixed_total > n:
+        sys.exit(
+            f"Fixed quotas sum to {fixed_total}, which exceeds --n={n}."
+        )
+
+    remaining = n - fixed_total
+    other = {
+        label: count
+        for label, count in population.items()
+        if label not in targets and count > 0
+    }
+    other_total = sum(other.values())
+
+    if remaining > 0:
+        if other_total < remaining:
+            sys.exit(
+                f"Cannot reach --n={n}: fixed quotas consume {fixed_total}, "
+                f"but the remaining strata contain only {other_total} papers. "
+                "Lower --n, lower a quota, or change --unknown / --label-mode."
+            )
+        targets.update(proportional_allocation(other, remaining))
+
+    for label in population:
+        targets.setdefault(label, 0)
+
+    return targets, "quota"
+
+
+def percent(count, total):
+    return round(100.0 * count / total, 2) if total else 0.0
+
+
+# --------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Create a reproducible random subset of ResearchParsa papers."
+        description="Create a reproducible random subset of ResearchParsa papers.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  %(prog)s --db data/db.sqlite --out sub.sqlite --n 2000\n"
+            "  %(prog)s --db data/db.sqlite --out sub.sqlite --n 2000 --ontopic 200\n"
+            "  %(prog)s --db data/db.sqlite --out sub.sqlite --ontopic 200 --offtopic 1800\n"
+            "  %(prog)s --db data/db.sqlite --out sub.sqlite --n 500 --no-stratify\n"
+        ),
     )
 
-    ap.add_argument(
-        "--db",
-        required=True,
-        help="Source SQLite database, e.g. data/db.sqlite",
-    )
-    ap.add_argument(
-        "--out",
-        required=True,
-        help="New SQLite database to create, e.g. data/subset.sqlite",
-    )
+    ap.add_argument("--db", required=True, help="Source SQLite database")
+    ap.add_argument("--out", required=True, help="New SQLite database to create")
+
     ap.add_argument(
         "--n",
         type=int,
-        required=True,
-        help="Number of papers to select, e.g. 500",
+        default=None,
+        help="Total subset size. Optional if both --ontopic and --offtopic are given.",
     )
     ap.add_argument(
-        "--seed",
-        default="20260104",
-        help="Seed for reproducible sampling",
+        "--ontopic",
+        type=int,
+        default=None,
+        help=(
+            "Exact number of on-topic papers. Enables quota mode. "
+            "Remaining budget goes to the other strata. 0 is honored."
+        ),
     )
+    ap.add_argument(
+        "--offtopic",
+        type=int,
+        default=None,
+        help="Exact number of off-topic papers. Enables quota mode. 0 is honored.",
+    )
+
+    ap.add_argument("--seed", default="20260104", help="Reproducibility seed")
+
     ap.add_argument(
         "--label-mode",
         choices=["app", "majority", "strict"],
         default="app",
         help=(
-            "app = UI hide_offtopic rule, solid true vs everything else; "
-            "majority = classification.is_offtopic true/false/null; "
+            "app = UI hide_offtopic rule (solid true vs everything else); "
+            "majority = raw averaged true/false/null; "
             "strict = solid true/false only, otherwise unknown"
         ),
     )
@@ -230,43 +326,57 @@ def main():
         "--unknown",
         choices=["keep", "drop", "ontopic", "offtopic"],
         default="keep",
-        help="What to do with unknown labels in majority/strict modes",
+        help="How to handle unknown labels in majority/strict modes",
     )
+
     ap.add_argument(
         "--no-stratify",
         action="store_true",
-        help="Do simple reproducible random sampling without preserving label proportions",
+        help="Simple reproducible random sampling; cannot be combined with quotas",
     )
     ap.add_argument(
         "--include-placeholder",
         action="store_true",
-        help=(
-            "Include the placeholder row if present. "
-            "Note: placeholder is usually type 'misc' and will still be excluded "
-            "by the article/inproceedings filter."
-        ),
+        help="Include the placeholder row if present (usually excluded by the type filter anyway)",
     )
-    ap.add_argument(
-        "--ids-out",
-        help="Optional path to also write selected paper IDs, one per line",
-    )
-    ap.add_argument(
-        "--force",
-        action="store_true",
-        help="Overwrite --out if it exists",
-    )
+    ap.add_argument("--ids-out", help="Also write selected paper IDs, one per line")
+    ap.add_argument("--force", action="store_true", help="Overwrite --out if it exists")
 
     args = ap.parse_args()
 
-    if args.n < 0:
-        sys.exit("--n must be >= 0")
+    # ---- Resolve total size ------------------------------------------------
+    if args.ontopic is None and args.offtopic is None:
+        if args.n is None:
+            ap.error("--n is required unless --ontopic/--offtopic quotas are supplied")
+        n = args.n
+    else:
+        if args.no_stratify:
+            ap.error("--no-stratify cannot be combined with --ontopic/--offtopic")
 
+        if args.ontopic is not None and args.offtopic is not None:
+            implied = args.ontopic + args.offtopic
+            if args.n is not None and args.n != implied:
+                ap.error(
+                    f"--n={args.n} conflicts with --ontopic + --offtopic = {implied}"
+                )
+            n = implied
+        else:
+            if args.n is None:
+                ap.error(
+                    "--n is required when only one of --ontopic/--offtopic is given "
+                    "(the other stratum receives the remainder)."
+                )
+            n = args.n
+
+    if n < 0:
+        ap.error("--n must be >= 0")
+
+    # ---- Paths -------------------------------------------------------------
     src_path = os.path.abspath(args.db)
     out_path = os.path.abspath(args.out)
 
     if not os.path.exists(src_path):
         sys.exit(f"Source database not found: {src_path}")
-
     if src_path == out_path:
         sys.exit("--out must be different from --db")
 
@@ -276,12 +386,19 @@ def main():
 
     if os.path.exists(out_path):
         if not args.force:
-            sys.exit(f"Output file already exists: {out_path} (use --force to overwrite)")
+            sys.exit(f"Output already exists: {out_path} (use --force to overwrite)")
         os.remove(out_path)
 
+    # ---- Read + filter + stratify -----------------------------------------
     src = sqlite3.connect(src_path)
     src.row_factory = sqlite3.Row
     src.execute("PRAGMA busy_timeout = 30000")
+
+    groups = defaultdict(list)
+    id_to_label = {}
+    skipped_non_allowed_type = 0
+    skipped_placeholder = 0
+    skipped_unknown = 0
 
     try:
         if not src.execute(
@@ -297,45 +414,41 @@ def main():
             """
         ).fetchall()
 
+        for row in rows:
+            paper_id = str(row["id"])
+            entry_type = (row["type"] or "").strip().lower()
+            title = row["title"] or ""
+
+            # HARD FILTER: only these two types are eligible, before sampling.
+            if entry_type not in ALLOWED_TYPES:
+                skipped_non_allowed_type += 1
+                continue
+
+            if not args.include_placeholder and title == PLACEHOLDER_TITLE:
+                skipped_placeholder += 1
+                continue
+
+            classification = parse_json_blob(row["classification"])
+            certainty = parse_json_blob(row["main_certainty"])
+            label = label_paper(classification, certainty, args.label_mode)
+
+            if label == "unknown":
+                if args.unknown == "drop":
+                    skipped_unknown += 1
+                    continue
+                if args.unknown == "ontopic":
+                    label = "ontopic"
+                elif args.unknown == "offtopic":
+                    label = "offtopic"
+
+            groups[label].append(paper_id)
+            id_to_label[paper_id] = label
+
     except sqlite3.Error as e:
         sys.exit(f"Could not read source database: {e}")
-
-    groups = defaultdict(list)
-    id_to_label = {}
-
-    skipped_non_allowed_type = 0
-    skipped_placeholder = 0
-
-    for row in rows:
-        paper_id = str(row["id"])
-        entry_type = (row["type"] or "").strip().lower()
-        title = row["title"] or ""
-
-        # IMPORTANT: keep only article and inproceedings entries BEFORE sampling.
-        if entry_type not in ALLOWED_TYPES:
-            skipped_non_allowed_type += 1
-            continue
-
-        # Extra safety, although the type filter already excludes the usual placeholder.
-        if not args.include_placeholder and title == PLACEHOLDER_TITLE:
-            skipped_placeholder += 1
-            continue
-
-        classification = parse_json_blob(row["classification"])
-        certainty = parse_json_blob(row["main_certainty"])
-
-        label = label_paper(classification, certainty, args.label_mode)
-
-        if label == "unknown":
-            if args.unknown == "drop":
-                continue
-            if args.unknown == "ontopic":
-                label = "ontopic"
-            elif args.unknown == "offtopic":
-                label = "offtopic"
-
-        groups[label].append(paper_id)
-        id_to_label[paper_id] = label
+    finally:
+        if not groups and "src" in locals():
+            src.close()
 
     for label in groups:
         groups[label].sort()
@@ -345,51 +458,52 @@ def main():
 
     if total_available == 0:
         sys.exit(
-            "No eligible papers found. "
-            "Only entries with type 'article' or 'inproceedings' are eligible."
+            "No eligible papers found. Only 'article' and 'inproceedings' "
+            "entries are eligible."
         )
 
-    if args.n > total_available:
-        sys.exit(f"--n={args.n} is larger than eligible paper count {total_available}")
-
+    # ---- Sample ------------------------------------------------------------
     if args.no_stratify:
-        all_ids = sorted(id_to_label.keys())
-        selected_ids = deterministic_sample(all_ids, args.n, args.seed)
+        if n > total_available:
+            sys.exit(f"--n={n} exceeds the eligible population {total_available}")
+        targets = None
+        mode = "random"
+        selected_ids = deterministic_sample(sorted(id_to_label), n, args.seed)
     else:
-        counts = proportional_allocation(population, args.n)
+        targets, mode = resolve_targets(
+            population, n, args.ontopic, args.offtopic
+        )
         selected_ids = []
-
         for label in sorted(groups):
-            sampled = deterministic_sample(
-                groups[label],
-                counts.get(label, 0),
-                f"{args.seed}:{label}",
+            selected_ids.extend(
+                deterministic_sample(
+                    groups[label],
+                    targets.get(label, 0),
+                    f"{args.seed}:{label}",
+                )
             )
-            selected_ids.extend(sampled)
 
     selected_ids = sorted(set(selected_ids))
 
-    if len(selected_ids) != args.n:
-        sys.exit(
-            f"Internal error: selected {len(selected_ids)} papers, expected {args.n}"
-        )
+    if len(selected_ids) != n:
+        sys.exit(f"Internal error: selected {len(selected_ids)}, expected {n}")
 
-    sample_counts = {}
+    sample_counts = defaultdict(int)
     for paper_id in selected_ids:
-        label = id_to_label[paper_id]
-        sample_counts[label] = sample_counts.get(label, 0) + 1
+        sample_counts[id_to_label[paper_id]] += 1
 
+    # ---- Optional ID manifest ---------------------------------------------
     if args.ids_out:
-        ids_out_path = os.path.abspath(args.ids_out)
-        ids_out_dir = os.path.dirname(ids_out_path)
-        if ids_out_dir:
-            os.makedirs(ids_out_dir, exist_ok=True)
-
-        with open(ids_out_path, "w", encoding="utf-8") as f:
+        ids_path = os.path.abspath(args.ids_out)
+        ids_dir = os.path.dirname(ids_path)
+        if ids_dir:
+            os.makedirs(ids_dir, exist_ok=True)
+        with open(ids_path, "w", encoding="utf-8") as f:
             for paper_id in selected_ids:
                 f.write(paper_id + "\n")
 
-    dst = sqlite3.connect(out_path)
+    # ---- Write output database --------------------------------------------
+    output_type_counts = {}
 
     try:
         schema = src.execute(
@@ -397,42 +511,64 @@ def main():
         ).fetchone()[0]
 
         index_sqls = [
-            row[0]
-            for row in src.execute(
+            r[0]
+            for r in src.execute(
                 "SELECT sql FROM sqlite_master "
                 "WHERE type='index' AND tbl_name='papers' AND sql IS NOT NULL"
             )
         ]
 
-        dst.execute("PRAGMA journal_mode = WAL")
-        dst.execute(schema)
+        dst = sqlite3.connect(out_path)
+        try:
+            dst.execute("PRAGMA journal_mode = WAL")
+            dst.execute(schema)
 
-        cols = [r[1] for r in src.execute("PRAGMA table_info(papers)")]
-        quoted_cols = ", ".join(f'"{c}"' for c in cols)
-        placeholders = ", ".join("?" for _ in cols)
-        insert_sql = f"INSERT INTO papers ({quoted_cols}) VALUES ({placeholders})"
+            cols = [r[1] for r in src.execute("PRAGMA table_info(papers)")]
+            quoted_cols = ", ".join(f'"{c}"' for c in cols)
+            placeholders = ", ".join("?" for _ in cols)
+            insert_sql = f"INSERT INTO papers ({quoted_cols}) VALUES ({placeholders})"
 
-        chunk_size = 500
+            chunk_size = 500
+            for i in range(0, len(selected_ids), chunk_size):
+                chunk = selected_ids[i : i + chunk_size]
+                in_ph = ", ".join("?" for _ in chunk)
+                select_sql = (
+                    f"SELECT {quoted_cols} FROM papers WHERE id IN ({in_ph})"
+                )
+                for row in src.execute(select_sql, chunk):
+                    dst.execute(insert_sql, tuple(row))
 
-        for i in range(0, len(selected_ids), chunk_size):
-            chunk = selected_ids[i : i + chunk_size]
-            in_placeholders = ", ".join("?" for _ in chunk)
-            select_sql = (
-                f"SELECT {quoted_cols} FROM papers WHERE id IN ({in_placeholders})"
-            )
+            for sql in index_sqls:
+                dst.execute(sql)
 
-            for row in src.execute(select_sql, chunk):
-                dst.execute(insert_sql, tuple(row))
+            dst.commit()
 
-        for sql in index_sqls:
-            dst.execute(sql)
+            # Defense in depth: verify the written database really only
+            # contains the two allowed entry types.
+            output_type_counts = {
+                r[0]: r[1]
+                for r in dst.execute(
+                    "SELECT LOWER(TRIM(COALESCE(type, ''))), COUNT(*) "
+                    "FROM papers GROUP BY 1"
+                )
+            }
+            unexpected = set(output_type_counts) - ALLOWED_TYPES
+            if unexpected:
+                raise RuntimeError(
+                    f"Type filter violated in output: {sorted(unexpected)}"
+                )
 
-        dst.commit()
-
+            written_count = dst.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
+            if written_count != n:
+                raise RuntimeError(
+                    f"Output contains {written_count} papers, expected {n}"
+                )
+        finally:
+            dst.close()
     finally:
-        dst.close()
         src.close()
 
+    # ---- Report ------------------------------------------------------------
     summary = {
         "source_db": src_path,
         "output_db": out_path,
@@ -440,21 +576,28 @@ def main():
         "allowed_types": sorted(ALLOWED_TYPES),
         "label_mode": args.label_mode,
         "unknown_handling": args.unknown,
-        "stratified": not args.no_stratify,
-        "requested_n": args.n,
-        "selected_n": len(selected_ids),
+        "mode": mode,
+        "quota_request": {
+            "ontopic": args.ontopic,
+            "offtopic": args.offtopic,
+        },
+        "requested_n": n,
+        "written_n": written_count,
         "skipped_non_allowed_type": skipped_non_allowed_type,
         "skipped_placeholder": skipped_placeholder,
-        "population": population,
-        "population_percent": {
+        "skipped_unknown": skipped_unknown,
+        "eligible_population": population,
+        "eligible_population_percent": {
             label: percent(count, total_available)
             for label, count in population.items()
         },
-        "sample": sample_counts,
+        "targets": targets,
+        "sample": dict(sample_counts),
         "sample_percent": {
-            label: percent(count, len(selected_ids))
+            label: percent(count, written_count)
             for label, count in sample_counts.items()
         },
+        "output_type_counts": output_type_counts,
     }
 
     if args.ids_out:

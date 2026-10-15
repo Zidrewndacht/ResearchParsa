@@ -274,7 +274,7 @@ class ConsensusStateMachine:
         elif verified is None:
             self.current_task_type = TASK_VERIFY
             return self._create_verify_task(paper)
-        elif verified == False or verified == 0 or (score is not None and score <= 7):
+        elif verified == False or verified == 0 or (score is not None and score < 7):
             self.iteration += 1
             if self.iteration == self.fresh_fallback:
                 self.current_task_type = TASK_CLASSIFY

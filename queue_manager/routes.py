@@ -322,7 +322,7 @@ def handle_consensus_route():
                 WHERE set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL
                 OR json_extract(set_1_llm, '$.verified') IS NULL
                 OR json_extract(set_1_llm, '$.verified') IN (0, 'false', 'False')
-                OR (json_extract(set_1_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_1_llm, '$.estimated_score') <= 7)
+                OR (json_extract(set_1_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_1_llm, '$.estimated_score') < 7)
                 OR json_extract(classification, '$.is_offtopic') IS NULL
                 OR (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
                     AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
@@ -337,7 +337,7 @@ def handle_consensus_route():
                 WHERE set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL
                 OR json_extract(set_2_llm, '$.verified') IS NULL
                 OR json_extract(set_2_llm, '$.verified') IN (0, 'false', 'False')
-                OR (json_extract(set_2_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_2_llm, '$.estimated_score') <= 7)
+                OR (json_extract(set_2_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_2_llm, '$.estimated_score') < 7)
                 OR json_extract(classification, '$.is_offtopic') IS NULL
                 OR (json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
                     AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
@@ -352,7 +352,7 @@ def handle_consensus_route():
                 WHERE set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL
                 OR json_extract(set_3_llm, '$.verified') IS NULL
                 OR json_extract(set_3_llm, '$.verified') IN (0, 'false', 'False')
-                OR (json_extract(set_3_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_3_llm, '$.estimated_score') <= 7)
+                OR (json_extract(set_3_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_3_llm, '$.estimated_score') < 7)
                 OR json_extract(classification, '$.is_offtopic') IS NULL
                 OR (json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
                     AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
