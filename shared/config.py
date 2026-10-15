@@ -581,6 +581,8 @@ def validate_llm_output(llm_data, task_type):
         iso_verdict = _tri_state_verdict(iso)
         if iso_verdict == 'unusable':
             return False, f"Field 'is_offtopic' answered {iso!r}, which is neither true, false, nor null"
+        # true / false / null are all valid screening answers.
+        # Only 'true' is persisted; false and null are discarded by the state machine.
         if iso_verdict == 'true':
             if 'relevance' not in llm_data:
                 return False, "Missing required field: relevance (required when flagging off-topic)"
