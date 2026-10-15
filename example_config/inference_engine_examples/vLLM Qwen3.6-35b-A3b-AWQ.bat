@@ -25,15 +25,14 @@ if errorlevel 1 (
 
 docker run --rm -it --gpus all ^
   -e ENABLE_PREFIX_CACHING=1 ^
-  -e HF_HUB_OFFLINE=1 ^
+  -e HF_HUB_OFFLINE=0 ^
   -v /mnt/host/d/AI/weights/vLLM/HuggingFaceCache:/root/.cache/huggingface ^
   -p 127.0.0.1:8086:8086 --ipc=host ^
   vllm/vllm-openai:v0.28.0-x86_64-cu129-ubuntu2404 ^
   cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit ^
   --host 0.0.0.0 --port 8086 ^
-  --max-num-seqs 48 ^
+  --max-num-seqs 112 ^
   --max-num-batched-tokens 4096 ^
-  --enable-prefix-caching ^
   --enable-expert-parallel ^
   --language-model-only ^
   --tensor-parallel-size 2 ^
@@ -41,9 +40,6 @@ docker run --rm -it --gpus all ^
   --reasoning-parser qwen3 ^
   --max_model_len 81920 ^
   --disable_custom_all_reduce ^
-  --safetensors-load-strategy=prefetch ^
   --no-ray ^
-  --compilation-config "{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\"}" ^
-  --speculative-config "{\"method\":\"mtp\",\"num_speculative_tokens\":2}"
+  --compilation-config "{\"max_cudagraph_capture_size\":112,\"custom_ops\":[\"+silu_and_mul\"],\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"cudagraph_capture_sizes\":[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,98,100,102,104,106,108,110,112]}"
 pause
-

@@ -493,30 +493,42 @@ def update_paper_custom_fields(paper_id, data, changed_by="user"):
         
         return fetch_updated_paper_data(paper_id)
     
+# shared/db.py
+
 def recalculate_main_set(paper_id, changed_by="LLM_Averaged", create_log_entry=True):
-    with get_db() as conn:
+    # Use BEGIN IMMEDIATE to serialize recalculations per-paper.
+    # Without this, concurrent threads (e.g., 3 screening sets completing
+    # simultaneously) can read stale data and overwrite a correct result.
+    conn = sqlite3.connect(_db_path, timeout=30)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("BEGIN IMMEDIATE")
         cursor = conn.cursor()
         paper = dict(cursor.execute("SELECT * FROM papers WHERE id = ?", (paper_id,)).fetchone())
-        if not paper: return None
+        if not paper:
+            conn.rollback()
+            return None
+
         changed_timestamp = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        
+
         sets_data = []
         for sn in [1, 2, 3]:
             try: sets_data.append(json.loads(paper.get(f'set_{sn}_llm') or '{}'))
             except: sets_data.append({})
-            
+
         all_paths = set()
         for s in sets_data:
             all_paths.update(_get_all_paths(s))
-            
+
         main_classification = {}
         certainty_map = {}
-        main_output_log = {} 
-        
+        main_output_log = {}
 
         for path in all_paths:
             values = [_get_val_by_path(s, path) for s in sets_data]
-            
+
             if path == 'relevance' or path == 'estimated_score':
                 valid_vals = [v for v in values if isinstance(v, (int, float))]
                 avg = sum(valid_vals) / len(valid_vals) if valid_vals else None
@@ -557,14 +569,12 @@ def recalculate_main_set(paper_id, changed_by="LLM_Averaged", create_log_entry=T
                         if lower_v not in seen_lower:
                             seen_lower.add(lower_v)
                             unique_vals.append(cleaned)
-                
                 final_val = "; ".join(unique_vals) if unique_vals else None
                 _set_val_by_path(main_classification, path, final_val)
                 certainty_map[path] = 'solid' # Text fields don't conflict, they combine
                 main_output_log[path] = final_val
                 continue
-            # -----------------------------------------
-                
+
             main_val, certainty = calculate_field_certainty([1 if v is True else (0 if v is False else None) for v in values])
             final_val = True if main_val == 1 else (False if main_val == 0 else None)
             _set_val_by_path(main_classification, path, final_val)
@@ -575,11 +585,10 @@ def recalculate_main_set(paper_id, changed_by="LLM_Averaged", create_log_entry=T
         verified_from_score = [1 if (s is not None and s >= 7) else (0 if s is not None else None) for s in score_values]
         main_verified, verified_certainty = calculate_field_certainty(verified_from_score)
         final_verified = True if main_verified == 1 else (False if main_verified == 0 else None)
-        
         main_classification['verified'] = final_verified
         certainty_map['verified'] = verified_certainty
         main_output_log['verified'] = final_verified
-        
+
         score_valid = [v for v in score_values if v is not None]
         main_score = sum(score_valid) / len(score_valid) if score_valid else None
         final_score = int(round(main_score)) if main_score is not None else None
@@ -608,12 +617,11 @@ def recalculate_main_set(paper_id, changed_by="LLM_Averaged", create_log_entry=T
                 user_override_count = 0
             WHERE id = ?
         """, (class_json, class_json, cert_json, changed_timestamp, changed_by, sql_verified, final_score, main_verified_by, paper_id))
-   
+
         if create_log_entry:
             row = cursor.execute("SELECT llm_log FROM papers WHERE id = ?", (paper_id,)).fetchone()
             try: existing_log = json.loads(row[0]) if row and row[0] else []
             except: existing_log = []
-            
             log_entry = {
                 "timestamp": changed_timestamp, "type": "averaged_llm", "model": "averaged_3_sets",
                 "trace": "Averaged from 3 classification sets",
@@ -623,9 +631,15 @@ def recalculate_main_set(paper_id, changed_by="LLM_Averaged", create_log_entry=T
             }
             existing_log.append(log_entry)
             cursor.execute("UPDATE papers SET llm_log = ? WHERE id = ?", (json.dumps(existing_log), paper_id))
-            
+
+        conn.commit()
         return certainty_map
-    
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+  
 def fetch_updated_paper_data(paper_id):
     """Returns the parsed JSON blobs and baseline columns for frontend cell updates."""
     with get_db() as conn:
