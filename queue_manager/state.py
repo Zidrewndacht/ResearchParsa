@@ -23,6 +23,11 @@ TASK_SCREEN = "screen"
 
 # Score stamped on screened-off-topic sets so recalculate_main_set derives verified=True.
 SCREENING_VERIFIED_SCORE = 10
+
+# Relevance gate: only papers with relevance <= this are persisted as screened-off-topic.
+# Anything above is logged as valid but left for full classification.
+SCREENING_MAX_RELEVANCE = 2
+
 # ============================================================================
 # QUEUE STATE (Thread-Safe)
 # ============================================================================
@@ -451,31 +456,50 @@ class ScreeningStateMachine:
             is_valid, invalid_reason = config.validate_llm_output(llm_data, 'screen')
             if is_valid:
                 if llm_data.get('is_offtopic') is True:
-                    # Thinking-disabled models produce an empty trace; substitute a
-                    # meaningful placeholder so the log entry isn't blank.
-                    # A real thinking trace passes through as-is.
-                    trace = reasoning_trace or "Screener ran and flagged the paper as off-topic in instruct mode (no thinking trace)"
-                    paper = db.get_paper_by_id(self.paper_id)
-                    raw = paper.get(f'set_{set_num}_llm') if paper else None
-                    already_classified = False
-                    if raw:
-                        try:
-                            already_classified = (json.loads(raw) or {}).get('is_offtopic') is not None
-                        except Exception:
-                            already_classified = False
-                    if not already_classified:
-                        screened = {
-                            'research_area': llm_data.get('research_area'),
-                            'is_offtopic': True,
-                            'relevance': llm_data.get('relevance'),
-                            'verified': True,
-                            'estimated_score': SCREENING_VERIFIED_SCORE,
-                        }
-                        db.update_set_cache(
-                            self.paper_id, set_num, screened, model_name,
-                            trace, json.dumps(screened), valid=True, log_type="screener"
+                    # --- RELEVANCE GATE ---
+                    # The screener flagged this paper. Check whether the relevance
+                    # is low enough to actually skip full classification.
+                    relevance = llm_data.get('relevance')
+                    try:
+                        rel_num = float(relevance)
+                    except (TypeError, ValueError):
+                        rel_num = None
+
+                    if rel_num is not None and rel_num <= SCREENING_MAX_RELEVANCE:
+                        # Below threshold: persist the screened blob (existing logic)
+                        trace = reasoning_trace or "Screener ran and flagged the paper as off-topic in instruct mode (no thinking trace)"
+                        paper = db.get_paper_by_id(self.paper_id)
+                        raw = paper.get(f'set_{set_num}_llm') if paper else None
+                        already_classified = False
+                        if raw:
+                            try:
+                                already_classified = (json.loads(raw) or {}).get('is_offtopic') is not None
+                            except Exception:
+                                already_classified = False
+                        if not already_classified:
+                            screened = {
+                                'research_area': llm_data.get('research_area'),
+                                'is_offtopic': True,
+                                'relevance': llm_data.get('relevance'),
+                                'verified': True,
+                                'estimated_score': SCREENING_VERIFIED_SCORE,
+                            }
+                            db.update_set_cache(
+                                self.paper_id, set_num, screened, model_name,
+                                trace, json.dumps(screened), valid=True, log_type="screener"
+                            )
+                            db.recalculate_main_set(self.paper_id, changed_by=f"LLM_Screen_Set{set_num}")
+                    else:
+                        # Above threshold: screener flagged it, but not off-topic enough.
+                        # Log as VALID so /screen never retries this set.
+                        trace = reasoning_trace or (
+                            f"Screener flagged off-topic (relevance={rel_num}) but threshold "
+                            f"is <= {SCREENING_MAX_RELEVANCE}; left for full classification."
                         )
-                        db.recalculate_main_set(self.paper_id, changed_by=f"LLM_Screen_Set{set_num}")
+                        db.update_set_log_only(
+                            self.paper_id, set_num, "screener", model_name,
+                            trace, json_result, valid=True
+                        )
                 else:
                     # is_offtopic is false or null: valid "leave alone" answer.
                     trace = reasoning_trace or "Screener ran in instruct mode (no thinking trace) and did not flag the paper as off-topic; left for full classification."
@@ -491,9 +515,6 @@ class ScreeningStateMachine:
                                        trace, json_result, valid=False,
                                        invalid_reason=invalid_reason)
         else:
-            # LLM call failed or returned non-JSON — also a refusal.
-            # The dispatcher already puts the error message in reasoning_trace,
-            # so this fallback only fires if that's somehow empty too.
             trace = reasoning_trace or "Screening LLM call failed or returned non-JSON."
             db.update_set_log_only(self.paper_id, set_num, "screener", model_name,
                                    trace, json_result, valid=False,

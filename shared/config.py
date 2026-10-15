@@ -581,8 +581,6 @@ def validate_llm_output(llm_data, task_type):
         iso_verdict = _tri_state_verdict(iso)
         if iso_verdict == 'unusable':
             return False, f"Field 'is_offtopic' answered {iso!r}, which is neither true, false, nor null"
-        # true / false / null are all valid screening answers.
-        # Only 'true' is persisted; false and null are discarded by the state machine.
         if iso_verdict == 'true':
             if 'relevance' not in llm_data:
                 return False, "Missing required field: relevance (required when flagging off-topic)"
@@ -590,11 +588,10 @@ def validate_llm_output(llm_data, task_type):
             if isinstance(rel, bool) or rel is None:
                 return False, "Field 'relevance' must be a number when flagging off-topic"
             try:
-                rel_num = float(rel)
+                float(rel)
             except (TypeError, ValueError):
                 return False, f"Field 'relevance' must be a number, got {rel!r}"
-            if rel_num > 3:
-                return False, f"Screening flagged is_offtopic=true with relevance {rel_num}; off-topic requires relevance <= 3"
+            # Gate removed — the state machine decides the threshold.
         return True, None
     
     required = REQUIRED_VERIFIER_FIELDS if task_type == 'verify' else get_required_classification_fields()
