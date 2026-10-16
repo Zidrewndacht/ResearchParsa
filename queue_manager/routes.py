@@ -92,43 +92,48 @@ def handle_classify_route():
                     ORDER BY id, set_num
                 """)
             elif mode == 'remaining':
-                # A set is "remaining" if the LLM blob is empty/null, or missing the universal 'is_offtopic' key.
-                # ADDITIONALLY: if a paper has a screening conflict (not all 3 sets are Y),
-                # the screened Y sets must ALSO be fully classified. A paper is either
-                # screened YYY (done) or ALL sets go through full classification.
                 cursor.execute("""
                     SELECT id, 1 as set_num FROM papers
                     WHERE set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL
-                    OR (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
-                                    WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
-                        AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
-                                        WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
-                        AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                    OR (
+                        json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND json_array_length(COALESCE(set_1_llm_log, '[]')) > 0
+                        AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].type') = 'screener'
+                        AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
+                        AND NOT (
+                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
                             AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')))
+                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        )
+                    )
                     UNION ALL
                     SELECT id, 2 FROM papers
                     WHERE set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL
-                    OR (json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
-                                    WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
-                        AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
-                                        WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
-                        AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                    OR (
+                        json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND json_array_length(COALESCE(set_2_llm_log, '[]')) > 0
+                        AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].type') = 'screener'
+                        AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
+                        AND NOT (
+                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
                             AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')))
+                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        )
+                    )
                     UNION ALL
                     SELECT id, 3 FROM papers
                     WHERE set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL
-                    OR (json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
-                                    WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
-                        AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
-                                        WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
-                        AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                    OR (
+                        json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND json_array_length(COALESCE(set_3_llm_log, '[]')) > 0
+                        AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].type') = 'screener'
+                        AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
+                        AND NOT (
+                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
                             AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')))
+                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        )
+                    )
                     ORDER BY id, set_num
                 """)
             else:
@@ -316,84 +321,124 @@ def handle_consensus_route():
             # These need force_initial_classify so the state machine doesn't skip them.
             cursor.execute("""
                 SELECT id, 1 as set_num FROM papers
-                WHERE json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
-                            WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
-                AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
-                                WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
-                AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True'))
+                WHERE
+                    NOT (
+                        json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                    )
+                    AND json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                    AND json_array_length(COALESCE(set_1_llm_log, '[]')) > 0
+                    AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].type') = 'screener'
+                    AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
                 UNION ALL
-                SELECT id, 2 FROM papers
-                WHERE json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
-                            WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
-                AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
-                                WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
-                AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                SELECT id, 2 as set_num FROM papers
+                WHERE
+                    NOT (
+                        json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                    )
                     AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True'))
+                    AND json_array_length(COALESCE(set_2_llm_log, '[]')) > 0
+                    AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].type') = 'screener'
+                    AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
                 UNION ALL
-                SELECT id, 3 FROM papers
-                WHERE json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
-                            WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
-                AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
-                                WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
-                AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True'))
+                SELECT id, 3 as set_num FROM papers
+                WHERE
+                    NOT (
+                        json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                    )
+                    AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                    AND json_array_length(COALESCE(set_3_llm_log, '[]')) > 0
+                    AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].type') = 'screener'
+                    AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
                 ORDER BY id, set_num
             """)
             screened_force_set = {(row[0], row[1]) for row in cursor.fetchall()}
-
-            # --- Main scheduling query (existing conditions + new screened condition) ---
+            # --- Main scheduling query (Manual overrides + Standard Work + Screening Conflicts) ---
             cursor.execute("""
                 SELECT id, 1 as set_num FROM papers
-                WHERE set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL
-                OR json_extract(set_1_llm, '$.verified') IS NULL
-                OR json_extract(set_1_llm, '$.verified') IN (0, 'false', 'False')
-                OR (json_extract(set_1_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_1_llm, '$.estimated_score') < 7)
-                OR json_extract(classification, '$.is_offtopic') IS NULL
-                OR (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
-                                WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
-                    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
-                                    WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
-                    AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')))
+                WHERE
+                    -- 1. Manual override: main classification.is_offtopic is NULL -> Queue all 3 sets
+                    json_extract(classification, '$.is_offtopic') IS NULL
+                    OR
+                    -- 2. Paper is NOT YYY AND (Set needs standard work OR Set is currently screened)
+                    (
+                        NOT (
+                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        )
+                        AND
+                        (
+                            set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL
+                            OR json_extract(set_1_llm, '$.verified') IS NULL
+                            OR json_extract(set_1_llm, '$.verified') IN (0, 'false', 'False')
+                            OR (json_extract(set_1_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_1_llm, '$.estimated_score') < 7)
+                            OR
+                            (
+                                json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                                AND json_array_length(COALESCE(set_1_llm_log, '[]')) > 0
+                                AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].type') = 'screener'
+                                AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
+                            )
+                        )
+                    )
                 UNION ALL
-                SELECT id, 2 FROM papers
-                WHERE set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL
-                OR json_extract(set_2_llm, '$.verified') IS NULL
-                OR json_extract(set_2_llm, '$.verified') IN (0, 'false', 'False')
-                OR (json_extract(set_2_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_2_llm, '$.estimated_score') < 7)
-                OR json_extract(classification, '$.is_offtopic') IS NULL
-                OR (json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
-                                WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
-                    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
-                                    WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
-                    AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')))
+                SELECT id, 2 as set_num FROM papers
+                WHERE
+                    json_extract(classification, '$.is_offtopic') IS NULL
+                    OR
+                    (
+                        NOT (
+                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        )
+                        AND
+                        (
+                            set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL
+                            OR json_extract(set_2_llm, '$.verified') IS NULL
+                            OR json_extract(set_2_llm, '$.verified') IN (0, 'false', 'False')
+                            OR (json_extract(set_2_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_2_llm, '$.estimated_score') < 7)
+                            OR
+                            (
+                                json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                                AND json_array_length(COALESCE(set_2_llm_log, '[]')) > 0
+                                AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].type') = 'screener'
+                                AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
+                            )
+                        )
+                    )
                 UNION ALL
-                SELECT id, 3 FROM papers
-                WHERE set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL
-                OR json_extract(set_3_llm, '$.verified') IS NULL
-                OR json_extract(set_3_llm, '$.verified') IN (0, 'false', 'False')
-                OR (json_extract(set_3_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_3_llm, '$.estimated_score') < 7)
-                OR json_extract(classification, '$.is_offtopic') IS NULL
-                OR (json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
-                                WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
-                    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
-                                    WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
-                    AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')))
+                SELECT id, 3 as set_num FROM papers
+                WHERE
+                    json_extract(classification, '$.is_offtopic') IS NULL
+                    OR
+                    (
+                        NOT (
+                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        )
+                        AND
+                        (
+                            set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL
+                            OR json_extract(set_3_llm, '$.verified') IS NULL
+                            OR json_extract(set_3_llm, '$.verified') IN (0, 'false', 'False')
+                            OR (json_extract(set_3_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_3_llm, '$.estimated_score') < 7)
+                            OR
+                            (
+                                json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                                AND json_array_length(COALESCE(set_3_llm_log, '[]')) > 0
+                                AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].type') = 'screener'
+                                AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
+                            )
+                        )
+                    )
                 ORDER BY id, set_num
             """)
             paper_set_pairs = cursor.fetchall()
@@ -465,26 +510,26 @@ def handle_screen_route():
         cursor.execute("""
             SELECT id, 1 as set_num FROM papers
             WHERE (set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL)
-            AND NOT EXISTS (
-                SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
-                WHERE json_extract(value, '$.type') = 'screener'
-                AND json_extract(value, '$.valid') = 1
+            AND (
+                json_array_length(COALESCE(set_1_llm_log, '[]')) = 0
+                OR json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].type') != 'screener'
+                OR json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].valid') NOT IN (1, 'true', 'True')
             )
             UNION ALL
             SELECT id, 2 FROM papers
             WHERE (set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL)
-            AND NOT EXISTS (
-                SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
-                WHERE json_extract(value, '$.type') = 'screener'
-                AND json_extract(value, '$.valid') = 1
+            AND (
+                json_array_length(COALESCE(set_2_llm_log, '[]')) = 0
+                OR json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].type') != 'screener'
+                OR json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].valid') NOT IN (1, 'true', 'True')
             )
             UNION ALL
             SELECT id, 3 FROM papers
             WHERE (set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL)
-            AND NOT EXISTS (
-                SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
-                WHERE json_extract(value, '$.type') = 'screener'
-                AND json_extract(value, '$.valid') = 1
+            AND (
+                json_array_length(COALESCE(set_3_llm_log, '[]')) = 0
+                OR json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].type') != 'screener'
+                OR json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].valid') NOT IN (1, 'true', 'True')
             )
             ORDER BY id, set_num
         """)
