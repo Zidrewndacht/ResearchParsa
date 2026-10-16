@@ -160,29 +160,8 @@ def handle_classify_route():
 
         else:
             return jsonify({'error': f'Invalid mode: {mode}'}), 400
-
-            paper_set_pairs = cursor.fetchall()
         # --- DB CONNECTION RELEASED HERE ---
-
-        log(f"{_color_prefix('DB QUERY:', Colors.DB)} mode={_color_mode(mode)} found {len(paper_set_pairs)} paper×set pairs")
-        if not paper_set_pairs:
-            log(f"WARNING: No paper×set pairs found for mode={mode}")
-            return jsonify({'status': 'queued', 'papers_queued': 0}), 200
-
-        # 2. PREPARATION PHASE: Enqueue tasks (get_prompts handles its own micro-DB lookups)
-        total_tasks = 0
-        for pid, set_num in paper_set_pairs:
-            sm = ClassificationStateMachine(pid, set_num, prompt_template, model_alias)
-            tasks = sm.get_prompts()
-            for task in tasks:
-                state.enqueue(task)
-            total_tasks += 1
-
-        unique_papers = len({p[0] for p in paper_set_pairs})
-        log(f"{_color_prefix('BATCH ENQUEUE:', Colors.BATCH)} papers={unique_papers} tasks={total_tasks}")
-        log_queue_status()
-        return jsonify({'status': 'queued', 'papers_queued': len(paper_set_pairs), 'tasks_queued': total_tasks}), 200
-
+        
 @queue_bp.route('/verify', methods=['POST'])
 def handle_verify_route():
     """Handle verification request (single paper or batch)."""
@@ -282,17 +261,6 @@ def handle_consensus_route():
     except Exception as e:
         log(f"{_color_prefix('ERROR:', Colors.ERROR)} Failed to get consensus templates: {e}")
         return jsonify({'error': f'Failed to get consensus templates: {e}'}), 500
-
-    def _spawn(sm, set_num, force):
-        """
-        Prepare a ConsensusStateMachine for one set. force=True is applied
-        only when the set is being promoted from 'screened_offtopic' to a
-        real classification, or when the whole paper is under a manual
-        user override. Returns the machine (with callback attached) if a
-        task was produced, otherwise None.
-        """
-        sm.force_initial_classify = force
-        return sm
 
     # ------------------------------------------------------------------
     # Single-paper mode
