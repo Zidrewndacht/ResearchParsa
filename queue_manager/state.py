@@ -492,13 +492,15 @@ class ScreeningStateMachine:
                     else:
                         # Above threshold: screener flagged it, but not off-topic enough.
                         # Log as VALID so /screen never retries this set.
+                        # Discard the screener's classification output — the log
+                        # entry is a screening mark only, not classification data.
                         trace = reasoning_trace or (
                             f"Screener flagged off-topic (relevance={rel_num}) but threshold "
                             f"is <= {SCREENING_MAX_RELEVANCE}; left for full classification."
                         )
                         db.update_set_log_only(
                             self.paper_id, set_num, "screener", model_name,
-                            trace, json_result, valid=True
+                            trace, "{}", valid=True
                         )
                 else:
                     # is_offtopic is false or null.
@@ -509,11 +511,11 @@ class ScreeningStateMachine:
                     # classification via /consensus.
                     #
                     # Log as valid so /screen does not retry this set.
-                    # Do NOT persist any classification blob.
+                    # Do NOT persist any classification blob or output.
                     trace = reasoning_trace or "Screener ran in instruct mode (no thinking trace) and did not flag the paper as off-topic; left for full classification."
                     db.update_set_log_only(
                         self.paper_id, set_num, "screener", model_name,
-                        trace, json_result, valid=True
+                        trace, "{}", valid=True
                     )
             else:
                 # Refused: log the invalid screening, leave the set untouched.

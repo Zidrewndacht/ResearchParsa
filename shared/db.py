@@ -493,8 +493,6 @@ def update_paper_custom_fields(paper_id, data, changed_by="user"):
         
         return fetch_updated_paper_data(paper_id)
     
-# shared/db.py
-
 def recalculate_main_set(paper_id, changed_by="LLM_Averaged", create_log_entry=True):
     # Use BEGIN IMMEDIATE to serialize recalculations per-paper.
     # Without this, concurrent threads (e.g., 3 screening sets completing

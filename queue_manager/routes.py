@@ -92,11 +92,43 @@ def handle_classify_route():
                     ORDER BY id, set_num
                 """)
             elif mode == 'remaining':
-                # A set is "remaining" if the LLM blob is empty/null, or missing the universal 'is_offtopic' key
+                # A set is "remaining" if the LLM blob is empty/null, or missing the universal 'is_offtopic' key.
+                # ADDITIONALLY: if a paper has a screening conflict (not all 3 sets are Y),
+                # the screened Y sets must ALSO be fully classified. A paper is either
+                # screened YYY (done) or ALL sets go through full classification.
                 cursor.execute("""
-                    SELECT id, 1 as set_num FROM papers WHERE set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL
-                    UNION ALL SELECT id, 2 FROM papers WHERE set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL
-                    UNION ALL SELECT id, 3 FROM papers WHERE set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL
+                    SELECT id, 1 as set_num FROM papers
+                    WHERE set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL
+                    OR (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
+                                    WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
+                        AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
+                                        WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
+                        AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')))
+                    UNION ALL
+                    SELECT id, 2 FROM papers
+                    WHERE set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL
+                    OR (json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
+                                    WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
+                        AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
+                                        WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
+                        AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')))
+                    UNION ALL
+                    SELECT id, 3 FROM papers
+                    WHERE set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL
+                    OR (json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                        AND EXISTS (SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
+                                    WHERE json_extract(value, '$.type') = 'screener' AND json_extract(value, '$.valid') = 1)
+                        AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
+                                        WHERE json_extract(value, '$.type') IN ('classifier', 'consensus') AND json_extract(value, '$.valid') = 1)
+                        AND NOT (json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
+                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')))
                     ORDER BY id, set_num
                 """)
             else:
