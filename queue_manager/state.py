@@ -101,6 +101,210 @@ def log_queue_status():
     log_file_queue_status(queue_size, total_in_flight, classify_in_flight, verify_in_flight, reclassify_in_flight, screen_in_flight, mode)
 
 # ============================================================================
+# SET STATE DERIVATION
+# ============================================================================
+# A set is in exactly one of these states. The state is derived from the
+# CURRENT blob (set_N_llm) plus the most recent valid log entry that WROTE
+# that blob. Superseded history is irrelevant.
+#
+#   pending           - is_offtopic is null → classification is awaited
+#   screened_offtopic - latest blob-producing entry is a screener
+#   classified        - full classification, but not verified / score < 7
+#   done              - full classification verified with score >= 7
+#
+# Invariants this encodes:
+#   * Screening never persists is_offtopic=false and never persists null.
+#     Only is_offtopic=true is written to the blob by the screener. If a
+#     blob has is_offtopic=null, it is pending classification, regardless
+#     of any screener history entry.
+#   * A paper is considered finished iff all three sets are screened_offtopic
+#     OR all three sets are done. Any mix requires per-set action.
+
+SET_STATE_PENDING           = 'pending'
+SET_STATE_SCREENED_OFFTOPIC = 'screened_offtopic'
+SET_STATE_CLASSIFIED        = 'classified'
+SET_STATE_DONE              = 'done'
+
+# Score threshold for "verified => done". Mirrors ConsensusStateMachine.
+_VERIFIED_MIN_SCORE = 7
+
+
+def _latest_blob_source(paper, set_num):
+    """
+    Return the origin of the current set_N_llm blob by walking set_N_llm_log
+    backwards to the most recent valid entry that wrote a blob.
+
+    Blob-producing entry types: 'screener', 'classifier', 'consensus'.
+    'verifier' entries only patch verified/estimated_score on the existing
+    blob, so they are skipped.
+
+    Returns 'screener', 'classifier', or None if no blob-producing entry
+    exists yet.
+    """
+    raw_log = paper.get(f'set_{set_num}_llm_log')
+    try:
+        log = json.loads(raw_log) if raw_log else []
+    except Exception:
+        log = []
+    for entry in reversed(log):
+        if not entry.get('valid'):
+            continue
+        t = entry.get('type')
+        if t == 'screener':
+            return 'screener'
+        if t in ('classifier', 'consensus'):
+            return 'classifier'
+        # 'verifier' or unknown -> keep walking back to the blob's origin
+    return None
+
+
+def get_set_state(paper, set_num):
+    """
+    Derive the current logical state of set `set_num` for the given paper row.
+
+    `paper` must contain the set_N_llm and set_N_llm_log columns (strings),
+    as returned by db.get_paper_by_id() or a SELECT of those columns.
+    """
+    raw = paper.get(f'set_{set_num}_llm')
+    try:
+        blob = json.loads(raw) if raw else {}
+    except Exception:
+        blob = {}
+
+    # Pending gate must come BEFORE source detection: the screener can log a
+    # valid entry without persisting a blob (is_offtopic=false/null path), so
+    # a null is_offtopic blob is always pending regardless of screener history.
+    if blob.get('is_offtopic') is None:
+        return SET_STATE_PENDING
+
+    if _latest_blob_source(paper, set_num) == 'screener':
+        # Screener only ever persists is_offtopic=true.
+        return SET_STATE_SCREENED_OFFTOPIC
+
+    # Full classification. Normalize legacy stringified booleans so the
+    # decision matches the /consensus SQL gate that previously existed.
+    verified = blob.get('verified')
+    if isinstance(verified, str):
+        s = verified.strip().lower()
+        if s in ('true', '1', 'yes', 'on'):
+            verified = True
+        elif s in ('false', '0', 'no', 'off'):
+            verified = False
+
+    if verified is not True:
+        return SET_STATE_CLASSIFIED
+
+    score = blob.get('estimated_score')
+    if score is not None:
+        try:
+            if float(score) < _VERIFIED_MIN_SCORE:
+                return SET_STATE_CLASSIFIED
+        except (TypeError, ValueError):
+            return SET_STATE_CLASSIFIED
+
+    return SET_STATE_DONE
+
+
+def is_manual_user_override(paper):
+    """
+    True iff the main classification.is_offtopic is null AND that null was
+    written by the user. A null produced by an unresolved conflict is NOT a
+    manual override — those are handled by the normal per-set rules.
+    """
+    try:
+        main_class = json.loads(paper.get('classification') or '{}')
+    except Exception:
+        main_class = {}
+    if main_class.get('is_offtopic') is not None:
+        return False
+    return (paper.get('changed_by') or '').strip().lower() == 'user'
+
+def plan_classify_actions(paper):
+    """
+    Planner for /classify mode=remaining (one-shot classification pass).
+
+    Contract for this route:
+      * Produces only classification tasks.
+      * Never chains into verification or reclassification.
+      * Never touches a set that already carries a real classification.
+
+    Rules:
+      1. Manual user override -> classify all three sets from scratch.
+      2. All three sets screened_offtopic -> paper is done, no actions.
+      3. All three sets done (classified+verified) -> paper is done, no actions.
+      4. Otherwise (mixed / incomplete):
+           - pending           -> classify
+           - screened_offtopic -> promote to full classification (paper is mixed,
+                                  so screening cannot be trusted for this set)
+           - classified        -> skip (verification is /verify's concern;
+                                       re-classifying would discard the blob
+                                       and this route does not verify)
+           - done              -> skip
+
+    The second tuple element mirrors plan_consensus_actions. ClassificationStateMachine
+    always produces a fresh classification, so it does not consume the flag; it is
+    returned for symmetry and future-proofing.
+    """
+    if is_manual_user_override(paper):
+        return [(n, True) for n in (1, 2, 3)]
+
+    states = {n: get_set_state(paper, n) for n in (1, 2, 3)}
+
+    if all(s == SET_STATE_SCREENED_OFFTOPIC for s in states.values()):
+        return []
+    if all(s == SET_STATE_DONE for s in states.values()):
+        return []
+
+    actions = []
+    for n in (1, 2, 3):
+        s = states[n]
+        if s == SET_STATE_PENDING:
+            actions.append((n, False))
+        elif s == SET_STATE_SCREENED_OFFTOPIC:
+            actions.append((n, True))
+        # SET_STATE_CLASSIFIED and SET_STATE_DONE -> left alone.
+    return actions
+
+def plan_consensus_actions(paper):
+    """
+    Return a list of (set_num, force_initial_classify) tuples describing
+    exactly which sets need work under the /consensus semantics.
+
+    Rules (single source of truth):
+      1. Manual user override (main is_offtopic is null AND changed_by=='user'):
+         classify all three sets from scratch, unconditionally. History on
+         individual sets is ignored by design.
+      2. All three sets screened_offtopic -> paper is done, no actions.
+      3. All three sets done              -> paper is done, no actions.
+      4. Otherwise (mixed / incomplete):
+           - done    -> never touched
+           - screened-> promoted to full classification (force=True)
+           - classified (not verified / score<7) -> passed to the consensus
+             loop as-is; it will emit TASK_VERIFY or TASK_RECLASSIFY as needed
+           - pending -> classified from scratch
+    """
+    if is_manual_user_override(paper):
+        return [(n, True) for n in (1, 2, 3)]
+
+    states = {n: get_set_state(paper, n) for n in (1, 2, 3)}
+
+    if all(s == SET_STATE_SCREENED_OFFTOPIC for s in states.values()):
+        return []
+    if all(s == SET_STATE_DONE for s in states.values()):
+        return []
+
+    actions = []
+    for n in (1, 2, 3):
+        s = states[n]
+        if s == SET_STATE_DONE:
+            continue
+        if s == SET_STATE_SCREENED_OFFTOPIC:
+            actions.append((n, True))
+        else:  # SET_STATE_CLASSIFIED or SET_STATE_PENDING
+            actions.append((n, False))
+    return actions
+
+# ============================================================================
 # STATE MACHINES
 # ============================================================================
 class ClassificationStateMachine:

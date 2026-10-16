@@ -330,10 +330,10 @@ def main():
         "queue_manager/state.py",
 
         #### #### # Meta module
-        "meta/agreement_core.py",
-        "meta/agreement_human_cli_v1.4.py",
-        "meta/agreement_3sets_cli_v1.4.py",
-        "meta/time_power_charts_v1.4.py",
+        # "meta/agreement_core.py",
+        # "meta/agreement_human_cli_v1.4.py",
+        # "meta/agreement_3sets_cli_v1.4.py",
+        # "meta/time_power_charts_v1.4.py",
         
         #### #### # Shared module
         # "shared/__init__.py",
@@ -342,9 +342,9 @@ def main():
         
         # #### #### #Web module
         # "web/__init__.py",
-        "web/export_logic.py",
+        # "web/export_logic.py",
         "web/filters.py",
-        "web/importer.py",
+        # "web/importer.py",
         "web/routes_data.py",
         "web/routes_files.py",
         "web/routes_ui.py",

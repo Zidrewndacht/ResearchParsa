@@ -22,6 +22,8 @@ from .state import (
     ScreeningStateMachine,
     VerificationStateMachine,
     log_queue_status,
+    plan_classify_actions,
+    plan_consensus_actions,
     state,
 )
 
@@ -78,66 +80,86 @@ def handle_classify_route():
             event.wait()
             
         return jsonify({'status': 'complete', 'paper_id': paper_id}), 200
-
+    
     else:
-        # Batch modes
-        # 1. STRICT DB PHASE: Fetch data and immediately release connection
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-            if mode == 'all':
+        # ------------------------------------------------------------------
+        # mode == 'all' : force-reclassify every paper x set (unchanged).
+        # mode == 'remaining' : select per-set actions via plan_classify_actions.
+        # ------------------------------------------------------------------
+        if mode == 'all':
+            with db.get_db() as conn:
+                cursor = conn.cursor()
                 cursor.execute("""
                     SELECT id, 1 as set_num FROM papers
                     UNION ALL SELECT id, 2 FROM papers
                     UNION ALL SELECT id, 3 FROM papers
                     ORDER BY id, set_num
                 """)
-            elif mode == 'remaining':
+                paper_set_pairs = cursor.fetchall()
+            # --- DB CONNECTION RELEASED HERE ---
+
+            log(f"{_color_prefix('DB QUERY:', Colors.DB)} mode={_color_mode(mode)} found {len(paper_set_pairs)} paper×set pairs")
+            if not paper_set_pairs:
+                log(f"WARNING: No paper×set pairs found for mode={mode}")
+                return jsonify({'status': 'queued', 'papers_queued': 0}), 200
+
+            total_tasks = 0
+            for pid, set_num in paper_set_pairs:
+                sm = ClassificationStateMachine(pid, set_num, prompt_template, model_alias)
+                for task in sm.get_prompts():
+                    state.enqueue(task)
+                total_tasks += 1
+
+            unique_papers = len({p[0] for p in paper_set_pairs})
+            log(f"{_color_prefix('BATCH ENQUEUE:', Colors.BATCH)} papers={unique_papers} tasks={total_tasks}")
+            log_queue_status()
+            return jsonify({'status': 'queued', 'papers_queued': len(paper_set_pairs), 'tasks_queued': total_tasks}), 200
+
+        elif mode == 'remaining':
+            # Selection is derived in Python from the current blob + the latest
+            # valid log entry, per set. The previous SQL encoded this in the FULL
+            # log history, which made superseded entries look authoritative and
+            # conflated paper-level is_offtopic-null with per-set needs.
+            with db.get_db() as conn:
+                cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT id, 1 as set_num FROM papers
-                    WHERE set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL
-                    OR (
-                        json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_array_length(COALESCE(set_1_llm_log, '[]')) > 0
-                        AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].type') = 'screener'
-                        AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
-                        AND NOT (
-                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        )
-                    )
-                    UNION ALL
-                    SELECT id, 2 FROM papers
-                    WHERE set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL
-                    OR (
-                        json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_array_length(COALESCE(set_2_llm_log, '[]')) > 0
-                        AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].type') = 'screener'
-                        AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
-                        AND NOT (
-                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        )
-                    )
-                    UNION ALL
-                    SELECT id, 3 FROM papers
-                    WHERE set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL
-                    OR (
-                        json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_array_length(COALESCE(set_3_llm_log, '[]')) > 0
-                        AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].type') = 'screener'
-                        AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
-                        AND NOT (
-                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        )
-                    )
-                    ORDER BY id, set_num
+                    SELECT id, classification, changed_by,
+                           set_1_llm, set_2_llm, set_3_llm,
+                           set_1_llm_log, set_2_llm_log, set_3_llm_log
+                    FROM papers
                 """)
-            else:
-                return jsonify({'error': f'Invalid mode: {mode}'}), 400
+                paper_rows = [dict(row) for row in cursor.fetchall()]
+            # --- DB CONNECTION RELEASED HERE ---
+
+            log(f"{_color_prefix('DB QUERY:', Colors.DB)} mode={_color_mode(mode)} scanned {len(paper_rows)} papers")
+
+            total_tasks = 0
+            touched_papers = set()
+            for paper in paper_rows:
+                pid = paper['id']
+                for set_num, _force in plan_classify_actions(paper):
+                    # ClassificationStateMachine is a one-shot classifier; it does
+                    # not consume _force and does not chain into verify/reclassify.
+                    sm = ClassificationStateMachine(pid, set_num, prompt_template, model_alias)
+                    for task in sm.get_prompts():
+                        state.enqueue(task)
+                        total_tasks += 1
+                        touched_papers.add(pid)
+
+            if not touched_papers:
+                log("WARNING: No paper→set pairs need classification")
+                return jsonify({'status': 'queued', 'papers_queued': 0}), 200
+
+            log(f"{_color_prefix('BATCH ENQUEUE:', Colors.BATCH)} papers={len(touched_papers)} tasks={total_tasks}")
+            log_queue_status()
+            return jsonify({
+                'status': 'queued',
+                'papers_queued': len(touched_papers),
+                'tasks_queued': total_tasks,
+            }), 200
+
+        else:
+            return jsonify({'error': f'Invalid mode: {mode}'}), 400
 
             paper_set_pairs = cursor.fetchall()
         # --- DB CONNECTION RELEASED HERE ---
@@ -258,9 +280,23 @@ def handle_consensus_route():
         reclassify_template = config.RECLASSIFY_PROMPT_TEMPLATE
         model_alias = config.get_model_alias(config.LLM_SERVER_URL)
     except Exception as e:
-        log(f"ERROR: Failed to get consensus templates: {e}", Colors.ERROR)
+        log(f"{_color_prefix('ERROR:', Colors.ERROR)} Failed to get consensus templates: {e}")
         return jsonify({'error': f'Failed to get consensus templates: {e}'}), 500
 
+    def _spawn(sm, set_num, force):
+        """
+        Prepare a ConsensusStateMachine for one set. force=True is applied
+        only when the set is being promoted from 'screened_offtopic' to a
+        real classification, or when the whole paper is under a manual
+        user override. Returns the machine (with callback attached) if a
+        task was produced, otherwise None.
+        """
+        sm.force_initial_classify = force
+        return sm
+
+    # ------------------------------------------------------------------
+    # Single-paper mode
+    # ------------------------------------------------------------------
     if mode == 'id' and paper_id:
         log(f"Single paper consensus: {paper_id} (3 sets)")
 
@@ -268,16 +304,13 @@ def handle_consensus_route():
         if not paper:
             return jsonify({'status': 'error', 'message': 'Paper not found'}), 404
 
-        try:
-            main_class = json.loads(paper.get('classification') or '{}')
-        except Exception:
-            main_class = {}
+        actions = plan_consensus_actions(paper)
+        if not actions:
+            log(f"{_color_prefix('COMPLETE:', Colors.VLLM_COMPLETE)} consensus paper={paper_id} (already complete)")
+            return jsonify({'status': 'complete', 'paper_id': paper_id}), 200
 
-        force_initial_classify = main_class.get('is_offtopic') is None
-
-        completion_events = [threading.Event() for _ in range(3)]
-
-        for set_num in [1, 2, 3]:
+        scheduled = []  # list of (sm, task)
+        for set_num, force in actions:
             sm = ConsensusStateMachine(
                 paper_id,
                 set_num,
@@ -285,177 +318,56 @@ def handle_consensus_route():
                 verify_template,
                 reclassify_template,
                 model_alias,
-                force_initial_classify=force_initial_classify
+                force_initial_classify=force,
             )
-            def make_callback(set_n, event):
+            task = sm.get_next_task()
+            if task:
+                scheduled.append((sm, task))
+
+        if not scheduled:
+            log(f"{_color_prefix('COMPLETE:', Colors.VLLM_COMPLETE)} consensus paper={paper_id} (no task to schedule)")
+            return jsonify({'status': 'complete', 'paper_id': paper_id}), 200
+
+        completion_events = [threading.Event() for _ in scheduled]
+        for i, (sm, task) in enumerate(scheduled):
+            def make_callback(idx, event):
                 def callback(pid, sn, success):
                     log(f"{_color_prefix('[CONSENSUS]', Colors.CONSENSUS)} paper={pid} set={sn} complete success={success}")
                     event.set()
                 return callback
-            sm.completion_callback = make_callback(set_num, completion_events[set_num - 1])
-            
-            task = sm.get_next_task()
-            if task:
-                state.enqueue(task)
-                
+            sm.completion_callback = make_callback(i, completion_events[i])
+            state.enqueue(task)
+
         log_queue_status()
         for event in completion_events:
             event.wait()
-            
-        log(f"COMPLETE: consensus paper={paper_id}")
+
+        log(f"{_color_prefix('COMPLETE:', Colors.VLLM_COMPLETE)} consensus paper={paper_id}")
         return jsonify({'status': 'complete', 'paper_id': paper_id}), 200
-        
-    else:
-        # 1. STRICT DB PHASE
-        with db.get_db() as conn:
-            cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT id
-                FROM papers
-                WHERE json_extract(classification, '$.is_offtopic') IS NULL
-            """)
-            main_null_ids = {row[0] for row in cursor.fetchall()}
+    # ------------------------------------------------------------------
+    # Batch mode
+    # ------------------------------------------------------------------
+    # Selection is derived in Python from the current blob + latest valid
+    # log entry. The old approach encoded the same information in SQL using
+    # the FULL log history, which made superseded entries look authoritative
+    # and conflated paper-level is_offtopic-null with per-set needs.
+    with db.get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, classification, changed_by,
+                   set_1_llm, set_2_llm, set_3_llm,
+                   set_1_llm_log, set_2_llm_log, set_3_llm_log
+            FROM papers
+        """)
+        paper_rows = [dict(row) for row in cursor.fetchall()]
 
-            # --- NEW: find screened-off-topic sets whose paper is NOT entirely off-topic ---
-            # These need force_initial_classify so the state machine doesn't skip them.
-            cursor.execute("""
-                SELECT id, 1 as set_num FROM papers
-                WHERE
-                    NOT (
-                        json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    )
-                    AND json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND json_array_length(COALESCE(set_1_llm_log, '[]')) > 0
-                    AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].type') = 'screener'
-                    AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
-                UNION ALL
-                SELECT id, 2 as set_num FROM papers
-                WHERE
-                    NOT (
-                        json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    )
-                    AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND json_array_length(COALESCE(set_2_llm_log, '[]')) > 0
-                    AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].type') = 'screener'
-                    AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
-                UNION ALL
-                SELECT id, 3 as set_num FROM papers
-                WHERE
-                    NOT (
-                        json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    )
-                    AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                    AND json_array_length(COALESCE(set_3_llm_log, '[]')) > 0
-                    AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].type') = 'screener'
-                    AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
-                ORDER BY id, set_num
-            """)
-            screened_force_set = {(row[0], row[1]) for row in cursor.fetchall()}
-            # --- Main scheduling query (Manual overrides + Standard Work + Screening Conflicts) ---
-            cursor.execute("""
-                SELECT id, 1 as set_num FROM papers
-                WHERE
-                    -- 1. Manual override: main classification.is_offtopic is NULL -> Queue all 3 sets
-                    json_extract(classification, '$.is_offtopic') IS NULL
-                    OR
-                    -- 2. Paper is NOT YYY AND (Set needs standard work OR Set is currently screened)
-                    (
-                        NOT (
-                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        )
-                        AND
-                        (
-                            set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL
-                            OR json_extract(set_1_llm, '$.verified') IS NULL
-                            OR json_extract(set_1_llm, '$.verified') IN (0, 'false', 'False')
-                            OR (json_extract(set_1_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_1_llm, '$.estimated_score') < 7)
-                            OR
-                            (
-                                json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                                AND json_array_length(COALESCE(set_1_llm_log, '[]')) > 0
-                                AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].type') = 'screener'
-                                AND json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
-                            )
-                        )
-                    )
-                UNION ALL
-                SELECT id, 2 as set_num FROM papers
-                WHERE
-                    json_extract(classification, '$.is_offtopic') IS NULL
-                    OR
-                    (
-                        NOT (
-                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        )
-                        AND
-                        (
-                            set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL
-                            OR json_extract(set_2_llm, '$.verified') IS NULL
-                            OR json_extract(set_2_llm, '$.verified') IN (0, 'false', 'False')
-                            OR (json_extract(set_2_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_2_llm, '$.estimated_score') < 7)
-                            OR
-                            (
-                                json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                                AND json_array_length(COALESCE(set_2_llm_log, '[]')) > 0
-                                AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].type') = 'screener'
-                                AND json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
-                            )
-                        )
-                    )
-                UNION ALL
-                SELECT id, 3 as set_num FROM papers
-                WHERE
-                    json_extract(classification, '$.is_offtopic') IS NULL
-                    OR
-                    (
-                        NOT (
-                            json_extract(set_1_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_2_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                            AND json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                        )
-                        AND
-                        (
-                            set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL
-                            OR json_extract(set_3_llm, '$.verified') IS NULL
-                            OR json_extract(set_3_llm, '$.verified') IN (0, 'false', 'False')
-                            OR (json_extract(set_3_llm, '$.estimated_score') IS NOT NULL AND json_extract(set_3_llm, '$.estimated_score') < 7)
-                            OR
-                            (
-                                json_extract(set_3_llm, '$.is_offtopic') IN (1, 'true', 'True')
-                                AND json_array_length(COALESCE(set_3_llm_log, '[]')) > 0
-                                AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].type') = 'screener'
-                                AND json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].valid') IN (1, 'true', 'True')
-                            )
-                        )
-                    )
-                ORDER BY id, set_num
-            """)
-            paper_set_pairs = cursor.fetchall()
-            # --- DB CONNECTION RELEASED HERE ---
+    log(f"{_color_prefix('DB QUERY:', Colors.DB)} mode={_color_mode(mode)} scanned {len(paper_rows)} papers")
 
-        log(f"{_color_prefix('DB QUERY:', Colors.DB)} mode={_color_mode(mode)} found {len(paper_set_pairs)} paper→set pairs")
-
-        if not paper_set_pairs:
-            log("WARNING: No paper→set pairs need consensus")
-            return jsonify({'status': 'queued', 'papers_queued': 0}), 200
-
-        # 2. PREPARATION PHASE
-        total_tasks = 0
-        for pid, set_num in paper_set_pairs:
-            # Force full classification for screened-only sets AND for papers
-            # whose main classification.is_offtopic is still NULL.
-            force = (pid in main_null_ids) or ((pid, set_num) in screened_force_set)
+    scheduled = []  # list of (pid, set_num, sm, task)
+    for paper in paper_rows:
+        pid = paper['id']
+        for set_num, force in plan_consensus_actions(paper):
             sm = ConsensusStateMachine(
                 pid,
                 set_num,
@@ -463,18 +375,30 @@ def handle_consensus_route():
                 verify_template,
                 reclassify_template,
                 model_alias,
-                force_initial_classify=force
+                force_initial_classify=force,
             )
             task = sm.get_next_task()
             if task:
-                state.enqueue(task)
-                total_tasks += 1
+                scheduled.append((pid, set_num, sm, task))
 
-        unique_papers = len({p[0] for p in paper_set_pairs})
-        log(f"{_color_prefix('BATCH ENQUEUE:', Colors.BATCH)} papers={unique_papers} tasks={total_tasks}")
-        log_queue_status()
+    if not scheduled:
+        log("WARNING: No paper→set pairs need consensus")
+        return jsonify({'status': 'queued', 'papers_queued': 0}), 200
 
-        return jsonify({'status': 'queued', 'papers_queued': len(paper_set_pairs), 'tasks_queued': total_tasks}), 200
+    total_tasks = 0
+    for pid, set_num, sm, task in scheduled:
+        state.enqueue(task)
+        total_tasks += 1
+
+    unique_papers = len({pid for pid, _, _, _ in scheduled})
+    log(f"{_color_prefix('BATCH ENQUEUE:', Colors.BATCH)} papers={unique_papers} tasks={total_tasks}")
+    log_queue_status()
+
+    return jsonify({
+        'status': 'queued',
+        'papers_queued': unique_papers,
+        'tasks_queued': total_tasks,
+    }), 200
 
 @queue_bp.route('/screen', methods=['POST'])
 def handle_screen_route():
@@ -510,26 +434,26 @@ def handle_screen_route():
         cursor.execute("""
             SELECT id, 1 as set_num FROM papers
             WHERE (set_1_llm IS NULL OR set_1_llm = '' OR json_extract(set_1_llm, '$.is_offtopic') IS NULL)
-            AND (
-                json_array_length(COALESCE(set_1_llm_log, '[]')) = 0
-                OR json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].type') != 'screener'
-                OR json_extract(set_1_llm_log, '$[' || (json_array_length(set_1_llm_log) - 1) || '].valid') NOT IN (1, 'true', 'True')
+            AND NOT EXISTS (
+                SELECT 1 FROM json_each(COALESCE(set_1_llm_log, '[]'))
+                WHERE json_extract(value, '$.type') = 'screener'
+                AND json_extract(value, '$.valid') = 1
             )
             UNION ALL
             SELECT id, 2 FROM papers
             WHERE (set_2_llm IS NULL OR set_2_llm = '' OR json_extract(set_2_llm, '$.is_offtopic') IS NULL)
-            AND (
-                json_array_length(COALESCE(set_2_llm_log, '[]')) = 0
-                OR json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].type') != 'screener'
-                OR json_extract(set_2_llm_log, '$[' || (json_array_length(set_2_llm_log) - 1) || '].valid') NOT IN (1, 'true', 'True')
+            AND NOT EXISTS (
+                SELECT 1 FROM json_each(COALESCE(set_2_llm_log, '[]'))
+                WHERE json_extract(value, '$.type') = 'screener'
+                AND json_extract(value, '$.valid') = 1
             )
             UNION ALL
             SELECT id, 3 FROM papers
             WHERE (set_3_llm IS NULL OR set_3_llm = '' OR json_extract(set_3_llm, '$.is_offtopic') IS NULL)
-            AND (
-                json_array_length(COALESCE(set_3_llm_log, '[]')) = 0
-                OR json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].type') != 'screener'
-                OR json_extract(set_3_llm_log, '$[' || (json_array_length(set_3_llm_log) - 1) || '].valid') NOT IN (1, 'true', 'True')
+            AND NOT EXISTS (
+                SELECT 1 FROM json_each(COALESCE(set_3_llm_log, '[]'))
+                WHERE json_extract(value, '$.type') = 'screener'
+                AND json_extract(value, '$.valid') = 1
             )
             ORDER BY id, set_num
         """)
