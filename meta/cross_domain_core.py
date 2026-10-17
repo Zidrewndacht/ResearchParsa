@@ -446,10 +446,25 @@ def build_cross_domain_table(
 # ==========================================================================
 
 def _macro(name: str, value: str, arity: int = 0) -> str:
+    """
+    Safe LaTeX macro emitter.
+
+    Uses provide/renew so generated macro files can override stale
+    definitions without causing duplicate \newcommand errors.
+    """
     if arity:
         value = value.replace("#", "##")
-        return rf"\newcommand{{\{name}}}[{arity}]{{{value}#1}}"
-    return rf"\newcommand{{\{name}}}{{{value}}}"
+        return (
+            rf"\providecommand{{\{name}}}[{arity}]{{}}"
+            "\n"
+            rf"\renewcommand{{\{name}}}[{arity}]{{{value}#1}}"
+        )
+
+    return (
+        rf"\providecommand{{\{name}}}{{}}"
+        "\n"
+        rf"\renewcommand{{\{name}}}{{{value}}}"
+    )
 
 
 def _c(v) -> str:            # count

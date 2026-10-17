@@ -955,7 +955,7 @@ def build_latex_tables(results: dict,
 \\label{{tab:agreement_overview}}
 \\begin{{tabular*}}{{\\textwidth}}{{@{{\\extracolsep{{\\fill}}}}lccc@{{}}}}
 \\hline
-\\textbf{{Outcome}} & \\textbf{{On-topic ({on_topic_n:,} samples)}} & \\textbf{{Off-topic ({off_topic_n:,} samples)}} & \\textbf{{All papers ({all_papers_n:,} samples)}} \\\\
+\\textbf{{Outcome}} & \\textbf{{\\shortstack{{On-topic \\\\ ({on_topic_n:,} samples)}}}} & \\textbf{{\\shortstack{{Off-topic \\\\ ({off_topic_n:,} samples)}}}} & \\textbf{{\\shortstack{{All papers \\\\ ({all_papers_n:,} samples)}}}} \\\\
 \\hline
 \\textbf{{Perfect (YYY/NNN/UUU)}} & {_pct(ot_p, on_topic_n):.2f}\\% ({ot_p:,}) & {_pct(off_p, off_topic_n):.2f}\\% ({off_p:,}) & {_pct(all_p, all_papers_n):.2f}\\% ({all_p:,}) \\\\
 \\quad \\textit{{\\footnotesize 95\\% CI}} & \\textit{{\\footnotesize [{results['on_topic_only']['overall_perfect_ci_lower']:.2f}\\%, {results['on_topic_only']['overall_perfect_ci_upper']:.2f}\\%]}} & \\textit{{\\footnotesize [{results['off_topic_only']['overall_perfect_ci_lower']:.2f}\\%, {results['off_topic_only']['overall_perfect_ci_upper']:.2f}\\%]}} & \\textit{{\\footnotesize [{results['all_papers']['overall_perfect_ci_lower']:.2f}\\%, {results['all_papers']['overall_perfect_ci_upper']:.2f}\\%]}} \\\\[6pt]
@@ -1003,7 +1003,7 @@ def build_latex_tables(results: dict,
 \\label{{tab:contradictions}}
 \\begin{{tabular*}}{{\\textwidth}}{{@{{\\extracolsep{{\\fill}}}}lccc@{{}}}}
 \\hline
-\\textbf{{Contradiction Type}} & \\textbf{{On-topic ({on_topic_n:,} samples)}} & \\textbf{{Off-topic ({off_topic_n:,} samples)}} & \\textbf{{All papers ({all_papers_n:,} samples)}} \\\\
+\\textbf{{Contradiction Type}} & \\textbf{{\\shortstack{{On-topic \\\\ ({on_topic_n:,} samples)}}}} & \\textbf{{\\shortstack{{Off-topic \\\\ ({off_topic_n:,} samples)}}}} & \\textbf{{\\shortstack{{All papers \\\\ ({all_papers_n:,} samples)}}}} \\\\
 \\hline
 \\textbf{{Biased Yes (YYN)}} & {_pct(ot_cby, on_topic_n):.2f}\\% ({ot_cby:,}) & {_pct(off_cby, off_topic_n):.2f}\\% ({off_cby:,}) & {_pct(all_cby, all_papers_n):.2f}\\% ({all_cby:,}) \\\\
 \\quad \\textit{{\\footnotesize 95\\% CI}} & \\textit{{\\footnotesize [{ot_cby_ci[0]:.2f}\\%, {ot_cby_ci[1]:.2f}\\%]}} & \\textit{{\\footnotesize [{off_cby_ci[0]:.2f}\\%, {off_cby_ci[1]:.2f}\\%]}} & \\textit{{\\footnotesize [{all_cby_ci[0]:.2f}\\%, {all_cby_ci[1]:.2f}\\%]}} \\\\[6pt]

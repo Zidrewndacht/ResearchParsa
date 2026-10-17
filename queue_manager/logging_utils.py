@@ -11,7 +11,15 @@ init(autoreset=True)
 # FILE LOGGING (Append-only JSON lines, separate files by category)
 # ============================================================================
 
-LOG_DIR = os.environ.get("PARSA_LOG_DIR", "logs")
+# Resolve the log directory to an ABSOLUTE path derived from this file's
+# location, not from the current working directory. A relative default
+# ("logs") lands wherever the launching shell happened to be, which made
+# logs silently disappear when the process was started from a different CWD.
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_MODULE_DIR)
+
+LOG_DIR = os.environ.get("PARSA_LOG_DIR") or os.path.join(_PROJECT_ROOT, "logs")
+LOG_DIR = os.path.abspath(LOG_DIR)
 os.makedirs(LOG_DIR, exist_ok=True)
 
 def _log_to_file(filename: str, **fields):
