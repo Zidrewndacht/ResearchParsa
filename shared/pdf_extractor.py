@@ -1,4 +1,4 @@
-# shared/pdf_reader.py
+# shared/pdf_extractor.py
 """
 PDF text extraction using PyMuPDF 2.0+.
 Converts PDF pages to structured markdown using the native Document.to_markdown() API,

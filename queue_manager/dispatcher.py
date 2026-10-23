@@ -24,8 +24,9 @@ def _send_to_vllm_sync(task):
     prompt = task['prompt']
     model_alias = task.get('model_alias', 'default')
     state_machine = task.get('state_machine')
-
-    log(f"{_color_prefix('SENDING:', Colors.VLLM_SEND)} task={task_id} type={task_type} paper={paper_id} set={set_num}")
+    
+    pdf_flag = " [PDF]" if task.get('pdf_used') else ""
+    log(f"{_color_prefix('SENDING:', Colors.VLLM_SEND)} task={task_id} type={task_type} paper={paper_id} set={set_num}{pdf_flag}")
     log_file_dispatch(task_id, task_type, paper_id, set_num)
 
     content = None

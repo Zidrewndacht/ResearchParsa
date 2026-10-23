@@ -1,16 +1,19 @@
 # queue/state.py
 import json
+import os
 import threading
 from collections import deque
 
 from shared import config, db
-from shared.pdf_reader import extract_pdf_markdown
+from shared.pdf_extractor import extract_pdf_markdown
 
 from .logging_utils import (
+    LOG_DIR,
     Colors,
     _color_prefix,
     _color_queue_mode,
     log,
+    log_file_pdf_extraction,
     log_file_queue_status,
 )
 
@@ -309,6 +312,28 @@ def plan_consensus_actions(paper):
 # PDF CONTENT HELPER
 # ============================================================================
 
+# Set to True to dump every PDF-augmented prompt to logs/pdf_prompts/
+# for manual inspection. Disable in production to save disk space.
+PDF_PROMPT_DUMP_ENABLED = os.environ.get("PARSA_PDF_PROMPT_DUMP", "1") == "1"
+
+def _dump_pdf_prompt(paper_id, set_num, task_type, prompt_text):
+    """Write the full assembled prompt to a debug file for inspection."""
+    if not PDF_PROMPT_DUMP_ENABLED:
+        return
+    try:
+        from datetime import datetime, timezone
+        dump_dir = os.path.join(LOG_DIR, 'pdf_prompts')
+        os.makedirs(dump_dir, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        filename = f"{task_type}_paper{paper_id}_set{set_num}_{timestamp}.txt"
+        path = os.path.join(dump_dir, filename)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(prompt_text)
+        log(f"{_color_prefix('PDF DUMP:', Colors.DB)} {path}")
+    except Exception as e:
+        log(f"{_color_prefix('PDF DUMP ERROR:', Colors.ERROR)} {e}")
+
+
 def _get_paper_content_for_prompt(paper):
     """
     Return (abstract_text, pdf_used).
@@ -318,23 +343,31 @@ def _get_paper_content_for_prompt(paper):
 
     pdf_used is True only when PDF text is actually injected into the prompt.
     """
+    import os  # ensure available for _dump_pdf_prompt
+
     abstract_text = paper.get('abstract') or ''
+    paper_id = paper.get('id')
 
     if not paper.get('pdf_filename'):
         return abstract_text, False
 
     try:
         pdf_text = extract_pdf_markdown(
-            paper.get('id'),
+            paper_id,
             paper.get('pdf_filename')
         )
     except Exception as exc:
-        log(f"{_color_prefix('PDF:', Colors.ERROR)} paper={paper.get('id')} error={exc}")
+        log(f"{_color_prefix('PDF:', Colors.ERROR)} paper={paper_id} extraction exception: {exc}")
+        log_file_pdf_extraction(paper_id, pdf_used=False, error=str(exc))
         return abstract_text, False
 
     if pdf_text:
+        log(f"{_color_prefix('PDF:', Colors.DB)} paper={paper_id} using PDF content ({len(pdf_text)} chars)")
+        log_file_pdf_extraction(paper_id, pdf_used=True, text_length=len(pdf_text))
         return pdf_text, True
 
+    log(f"{_color_prefix('PDF:', Colors.ERROR)} paper={paper_id} extraction returned empty, falling back to abstract")
+    log_file_pdf_extraction(paper_id, pdf_used=False, error="extraction returned empty")
     return abstract_text, False
 
 # ============================================================================
@@ -359,21 +392,27 @@ class ClassificationStateMachine:
 
         abstract_text, self.pdf_used = _get_paper_content_for_prompt(paper)
 
+        prompt = self.prompt_template.format(
+            title=paper.get('title', ''),
+            abstract=abstract_text,
+            keywords=paper.get('keywords', ''),
+            authors=paper.get('authors', ''),
+            year=paper.get('year', ''),
+            type=paper.get('type', ''),
+            journal=paper.get('journal', '')
+        )
+
+        if self.pdf_used:
+            _dump_pdf_prompt(self.paper_id, self.set_num, 'classify', prompt)
+
         task = {
             'task_type': TASK_CLASSIFY,
             'task_id': f"{self.paper_id}_set{self.set_num}_classify",
             'paper_id': self.paper_id,
             'set_num': self.set_num,
             'model_alias': self.model_alias,
-            'prompt': self.prompt_template.format(
-                title=paper.get('title', ''),
-                abstract=abstract_text,
-                keywords=paper.get('keywords', ''),
-                authors=paper.get('authors', ''),
-                year=paper.get('year', ''),
-                type=paper.get('type', ''),
-                journal=paper.get('journal', '')
-            ),
+            'pdf_used': self.pdf_used,
+            'prompt': prompt,
             'state_machine': self
         }
         return [task]
@@ -434,13 +473,19 @@ class VerificationStateMachine:
             'previous_classification_json': json.dumps(prev_class, indent=2)
         }
 
+        prompt = self.prompt_template.format(**format_data)
+
+        if self.pdf_used:
+            _dump_pdf_prompt(self.paper_id, self.set_num, 'verify', prompt)
+
         task = {
             'task_type': TASK_VERIFY,
             'task_id': f"{self.paper_id}_set{self.set_num}_verify",
             'paper_id': self.paper_id,
             'set_num': self.set_num,
             'model_alias': self.model_alias,
-            'prompt': self.prompt_template.format(**format_data),
+            'pdf_used': self.pdf_used,
+            'prompt': prompt,
             'state_machine': self
         }
         return [task]
@@ -552,21 +597,27 @@ class ConsensusStateMachine:
             return None
 
     def _create_classify_task(self, paper):
+        prompt = self.classify_template.format(
+            title=paper.get('title', ''),
+            abstract=self._abstract_text,
+            keywords=paper.get('keywords', ''),
+            authors=paper.get('authors', ''),
+            year=paper.get('year', ''),
+            type=paper.get('type', ''),
+            journal=paper.get('journal', '')
+        )
+
+        if self.pdf_used:
+            _dump_pdf_prompt(self.paper_id, self.set_num, f'consensus_classify_{self.iteration}', prompt)
+
         return {
             'task_type': TASK_CLASSIFY,
             'task_id': f"{self.paper_id}_set{self.set_num}_consensus_classify_{self.iteration}",
             'paper_id': self.paper_id,
             'set_num': self.set_num,
             'model_alias': self.model_alias,
-            'prompt': self.classify_template.format(
-                title=paper.get('title', ''),
-                abstract=self._abstract_text,
-                keywords=paper.get('keywords', ''),
-                authors=paper.get('authors', ''),
-                year=paper.get('year', ''),
-                type=paper.get('type', ''),
-                journal=paper.get('journal', '')
-            ),
+            'pdf_used': self.pdf_used,
+            'prompt': prompt,
             'state_machine': self
         }
 
@@ -590,13 +641,19 @@ class ConsensusStateMachine:
             'previous_classification_json': json.dumps(prev_class, indent=2)
         }
 
+        prompt = self.verify_template.format(**format_data)
+
+        if self.pdf_used:
+            _dump_pdf_prompt(self.paper_id, self.set_num, f'consensus_verify_{self.iteration}', prompt)
+
         return {
             'task_type': TASK_VERIFY,
             'task_id': f"{self.paper_id}_set{self.set_num}_consensus_verify_{self.iteration}",
             'paper_id': self.paper_id,
             'set_num': self.set_num,
             'model_alias': self.model_alias,
-            'prompt': self.verify_template.format(**format_data),
+            'pdf_used': self.pdf_used,
+            'prompt': prompt,
             'state_machine': self
         }
 
@@ -642,13 +699,19 @@ class ConsensusStateMachine:
             'user_trace': paper.get('user_trace', '') or '',
         }
 
+        prompt = self.reclassify_template.format(**format_data)
+
+        if self.pdf_used:
+            _dump_pdf_prompt(self.paper_id, self.set_num, f'consensus_reclassify_{self.iteration}', prompt)
+
         return {
             'task_type': TASK_RECLASSIFY,
             'task_id': f"{self.paper_id}_set{self.set_num}_consensus_reclassify_{self.iteration}",
             'paper_id': self.paper_id,
             'set_num': self.set_num,
             'model_alias': self.model_alias,
-            'prompt': self.reclassify_template.format(**format_data),
+            'pdf_used': self.pdf_used,
+            'prompt': prompt,
             'state_machine': self
         }
 
@@ -715,6 +778,19 @@ class ScreeningStateMachine:
 
         abstract_text, self.pdf_used = _get_paper_content_for_prompt(paper)
 
+        prompt = self.prompt_template.format(
+            title=paper.get('title', ''),
+            abstract=abstract_text,
+            keywords=paper.get('keywords', ''),
+            authors=paper.get('authors', ''),
+            year=paper.get('year', ''),
+            type=paper.get('type', ''),
+            journal=paper.get('journal', '')
+        )
+
+        if self.pdf_used:
+            _dump_pdf_prompt(self.paper_id, self.set_num, 'screen', prompt)
+
         task = {
             'task_type': TASK_SCREEN,
             'task_id': f"{self.paper_id}_set{self.set_num}_screen",
@@ -722,15 +798,8 @@ class ScreeningStateMachine:
             'set_num': self.set_num,
             'model_alias': self.model_alias,
             'llm_params': self.llm_params,
-            'prompt': self.prompt_template.format(
-                title=paper.get('title', ''),
-                abstract=abstract_text,
-                keywords=paper.get('keywords', ''),
-                authors=paper.get('authors', ''),
-                year=paper.get('year', ''),
-                type=paper.get('type', ''),
-                journal=paper.get('journal', '')
-            ),
+            'pdf_used': self.pdf_used,
+            'prompt': prompt,
             'state_machine': self
         }
         return [task]

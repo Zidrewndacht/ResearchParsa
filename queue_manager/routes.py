@@ -514,6 +514,57 @@ def handle_review_traces():
     return jsonify({'status': 'success', 'paper_id': paper_id})
 
 
+@queue_bp.route('/debug/pdf_extract', methods=['GET'])
+def debug_pdf_extract():
+    """
+    Debug endpoint: extract PDF markdown for a given paper_id without
+    running any classification. Returns the extracted text or an error.
+
+    Usage: GET /debug/pdf_extract?paper_id=<id>
+    """
+    from shared.pdf_extractor import extract_pdf_markdown
+
+    paper_id = request.args.get('paper_id')
+    if not paper_id:
+        return jsonify({'status': 'error', 'message': 'paper_id query param is required'}), 400
+
+    paper = db.get_paper_by_id(paper_id)
+    if not paper:
+        return jsonify({'status': 'error', 'message': f'Paper {paper_id} not found'}), 404
+
+    if not paper.get('pdf_filename'):
+        return jsonify({
+            'status': 'no_pdf',
+            'paper_id': paper_id,
+            'message': 'Paper has no pdf_filename in database',
+        }), 200
+
+    try:
+        markdown_text = extract_pdf_markdown(paper_id, paper.get('pdf_filename'))
+    except Exception as exc:
+        return jsonify({
+            'status': 'error',
+            'paper_id': paper_id,
+            'message': f'Extraction raised: {exc}',
+        }), 500
+
+    if markdown_text is None:
+        return jsonify({
+            'status': 'extraction_failed',
+            'paper_id': paper_id,
+            'pdf_filename': paper.get('pdf_filename'),
+            'message': 'extract_pdf_markdown returned None (file missing or unreadable)',
+        }), 200
+
+    return jsonify({
+        'status': 'success',
+        'paper_id': paper_id,
+        'pdf_filename': paper.get('pdf_filename'),
+        'text_length': len(markdown_text),
+        'markdown': markdown_text,
+    }), 200
+
+
 
 @queue_bp.app_errorhandler(404)
 def not_found(e):

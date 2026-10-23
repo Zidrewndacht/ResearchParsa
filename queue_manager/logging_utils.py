@@ -59,7 +59,17 @@ def log_file_queue_status(queue_size, total_in_flight, classify, verify, reclass
                  in_flight_total=total_in_flight, in_flight_classify=classify,
                  in_flight_verify=verify, in_flight_reclassify=reclassify,
                  in_flight_screen=screen, mode=mode)
-    
+
+def log_file_pdf_extraction(paper_id, pdf_used, text_length=None, error=None, source=None):
+    _log_to_file(
+        'pdf_extraction.log',
+        event='pdf_extraction',
+        paper_id=paper_id,
+        pdf_used=pdf_used,
+        text_length=text_length,
+        error=error,
+        source=source,
+    )   
 # ============================================================================
 # COLOR CONSTANTS FOR LOGGING (black-background friendly - LIGHT COLORS ONLY)
 # ============================================================================
