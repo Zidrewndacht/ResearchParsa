@@ -17,12 +17,12 @@ Below are some example outputs, from random papers:
 Please re-evaluate the paper based on its content (Title, Abstract, Keywords, Authors, Year, Type, Journal).
 
 *Title:* {title}
-*Abstract:* {abstract}
 *Keywords:* {keywords}
 *Authors:* {authors}
 *Publication Year:* {year}
 *Publication Type:* {type}
 *Publication Name:* {journal}
+*Abstract / Full Paper (when available):* {abstract}
 
 
 Below is the original classification and verification data, for reference on the reasoning behind the lack of consensus between original classifier and verifier. If you believe the *previous classification* was correct based on the paper content, feel free to repeat it. If you find the previous classification was indeed wrong, provide the corrected one.

@@ -4,6 +4,7 @@ import threading
 from collections import deque
 
 from shared import config, db
+from shared.pdf_reader import extract_pdf_markdown
 
 from .logging_utils import (
     Colors,
@@ -305,6 +306,38 @@ def plan_consensus_actions(paper):
     return actions
 
 # ============================================================================
+# PDF CONTENT HELPER
+# ============================================================================
+
+def _get_paper_content_for_prompt(paper):
+    """
+    Return (abstract_text, pdf_used).
+
+    If the paper has a readable PDF, return extracted PDF Markdown.
+    Otherwise return the normal abstract.
+
+    pdf_used is True only when PDF text is actually injected into the prompt.
+    """
+    abstract_text = paper.get('abstract') or ''
+
+    if not paper.get('pdf_filename'):
+        return abstract_text, False
+
+    try:
+        pdf_text = extract_pdf_markdown(
+            paper.get('id'),
+            paper.get('pdf_filename')
+        )
+    except Exception as exc:
+        log(f"{_color_prefix('PDF:', Colors.ERROR)} paper={paper.get('id')} error={exc}")
+        return abstract_text, False
+
+    if pdf_text:
+        return pdf_text, True
+
+    return abstract_text, False
+
+# ============================================================================
 # STATE MACHINES
 # ============================================================================
 class ClassificationStateMachine:
@@ -316,13 +349,16 @@ class ClassificationStateMachine:
         self.model_alias = model_alias
         self.completion_callback = None
         self.lock = threading.Lock()
-
+        self.pdf_used = False
+        
     def get_prompts(self):
         """Generate exactly 1 classification task for this specific paper/set."""
         paper = db.get_paper_by_id(self.paper_id)
         if not paper:
             return []
-            
+
+        abstract_text, self.pdf_used = _get_paper_content_for_prompt(paper)
+
         task = {
             'task_type': TASK_CLASSIFY,
             'task_id': f"{self.paper_id}_set{self.set_num}_classify",
@@ -331,7 +367,7 @@ class ClassificationStateMachine:
             'model_alias': self.model_alias,
             'prompt': self.prompt_template.format(
                 title=paper.get('title', ''),
-                abstract=paper.get('abstract', ''),
+                abstract=abstract_text,
                 keywords=paper.get('keywords', ''),
                 authors=paper.get('authors', ''),
                 year=paper.get('year', ''),
@@ -344,11 +380,13 @@ class ClassificationStateMachine:
 
     def on_set_complete(self, set_num, success, llm_data, model_name, reasoning_trace, json_result):
         """Callback when this single set classification completes."""
+        prefix = "(PDF) " if self.pdf_used else ""
+        changed_by = f"{prefix}LLM_Classify_Set{set_num}"
         if success and llm_data:
             is_valid, invalid_reason = config.validate_llm_output(llm_data, 'classify')
             if is_valid:
                 db.update_set_cache(self.paper_id, set_num, llm_data, model_name, reasoning_trace, json_result, valid=True)
-                db.recalculate_main_set(self.paper_id, changed_by=f"LLM_Classify_Set{set_num}")
+                db.recalculate_main_set(self.paper_id, changed_by=changed_by)
             else:
                 log(f"{_color_prefix('INVALID:', Colors.ERROR)} paper={self.paper_id} set={set_num} reason={invalid_reason}")
                 db.update_set_log_only(self.paper_id, set_num, "classifier", model_name, reasoning_trace, json_result, valid=False, invalid_reason=invalid_reason)
@@ -368,11 +406,15 @@ class VerificationStateMachine:
         self.model_alias = model_alias
         self.completion_callback = None
         self.lock = threading.Lock()
+        self.pdf_used = False
 
     def get_prompts(self):
         paper = db.get_paper_by_id(self.paper_id)
-        if not paper: return []
-        
+        if not paper:
+            return []
+
+        abstract_text, self.pdf_used = _get_paper_content_for_prompt(paper)
+
         # Load the EXACT raw LLM output from the cached DB blob
         raw_llm_data = paper.get(f'set_{self.set_num}_llm')
         try:
@@ -381,29 +423,39 @@ class VerificationStateMachine:
             prev_class = {}
 
         format_data = {
-            'title': paper.get('title', ''), 'abstract': paper.get('abstract', ''),
-            'keywords': paper.get('keywords', ''), 'authors': paper.get('authors', ''),
-            'year': paper.get('year', ''), 'type': paper.get('type', ''), 'journal': paper.get('journal', ''),
+            'title': paper.get('title', ''),
+            'abstract': abstract_text,
+            'keywords': paper.get('keywords', ''),
+            'authors': paper.get('authors', ''),
+            'year': paper.get('year', ''),
+            'type': paper.get('type', ''),
+            'journal': paper.get('journal', ''),
             # Pass the ENTIRE raw dictionary as a formatted JSON string
             'previous_classification_json': json.dumps(prev_class, indent=2)
         }
-        
+
         task = {
             'task_type': TASK_VERIFY,
             'task_id': f"{self.paper_id}_set{self.set_num}_verify",
-            'paper_id': self.paper_id, 'set_num': self.set_num, 'model_alias': self.model_alias,
-            'prompt': self.prompt_template.format(**format_data), 'state_machine': self
+            'paper_id': self.paper_id,
+            'set_num': self.set_num,
+            'model_alias': self.model_alias,
+            'prompt': self.prompt_template.format(**format_data),
+            'state_machine': self
         }
         return [task]
+    
 
 
     def on_set_complete(self, set_num, success, llm_data, model_name, reasoning_trace, json_result):
         """Callback when this single set verification completes."""
+        prefix = "(PDF) " if self.pdf_used else ""
+        changed_by = f"{prefix}LLM_Verify_Set{set_num}"
         if success and llm_data:
             is_valid, invalid_reason = config.validate_llm_output(llm_data, 'verify')
             if is_valid:
                 db.update_set_verifier(self.paper_id, set_num, llm_data, model_name, reasoning_trace, json_result, valid=True)
-                db.recalculate_main_set(self.paper_id, changed_by=f"LLM_Verify_Set{set_num}")
+                db.recalculate_main_set(self.paper_id, changed_by=changed_by)
             else:
                 log(f"{_color_prefix('INVALID:', Colors.ERROR)} paper={self.paper_id} set={set_num} reason={invalid_reason}")
                 db.update_set_log_only(self.paper_id, set_num, "verifier", model_name, reasoning_trace, json_result, valid=False, invalid_reason=invalid_reason)
@@ -437,8 +489,10 @@ class ConsensusStateMachine:
         self.current_task_type = None
         self.completion_callback = None
         self.lock = threading.Lock()
-
         self.force_initial_classify = force_initial_classify
+        self.pdf_used = False
+        self._abstract_text = None
+
 
     def get_next_task(self):
         """Determine next task based on current paper state."""
@@ -448,6 +502,9 @@ class ConsensusStateMachine:
 
         if self.iteration >= self.max_iterations:
             return None
+
+        if self._abstract_text is None:
+            self._abstract_text, self.pdf_used = _get_paper_content_for_prompt(paper)
 
         if self.force_initial_classify:
             self.force_initial_classify = False
@@ -502,9 +559,13 @@ class ConsensusStateMachine:
             'set_num': self.set_num,
             'model_alias': self.model_alias,
             'prompt': self.classify_template.format(
-                title=paper.get('title', ''), abstract=paper.get('abstract', ''),
-                keywords=paper.get('keywords', ''), authors=paper.get('authors', ''),
-                year=paper.get('year', ''), type=paper.get('type', ''), journal=paper.get('journal', '')
+                title=paper.get('title', ''),
+                abstract=self._abstract_text,
+                keywords=paper.get('keywords', ''),
+                authors=paper.get('authors', ''),
+                year=paper.get('year', ''),
+                type=paper.get('type', ''),
+                journal=paper.get('journal', '')
             ),
             'state_machine': self
         }
@@ -518,17 +579,25 @@ class ConsensusStateMachine:
             prev_class = {}
 
         format_data = {
-            'title': paper.get('title', ''), 'abstract': paper.get('abstract', ''),
-            'keywords': paper.get('keywords', ''), 'authors': paper.get('authors', ''),
-            'year': paper.get('year', ''), 'type': paper.get('type', ''), 'journal': paper.get('journal', ''),
+            'title': paper.get('title', ''),
+            'abstract': self._abstract_text,
+            'keywords': paper.get('keywords', ''),
+            'authors': paper.get('authors', ''),
+            'year': paper.get('year', ''),
+            'type': paper.get('type', ''),
+            'journal': paper.get('journal', ''),
             # Pass the ENTIRE raw dictionary as a formatted JSON string
             'previous_classification_json': json.dumps(prev_class, indent=2)
         }
+
         return {
             'task_type': TASK_VERIFY,
             'task_id': f"{self.paper_id}_set{self.set_num}_consensus_verify_{self.iteration}",
-            'paper_id': self.paper_id, 'set_num': self.set_num, 'model_alias': self.model_alias,
-            'prompt': self.verify_template.format(**format_data), 'state_machine': self
+            'paper_id': self.paper_id,
+            'set_num': self.set_num,
+            'model_alias': self.model_alias,
+            'prompt': self.verify_template.format(**format_data),
+            'state_machine': self
         }
 
     def _create_reclassify_task(self, paper):
@@ -553,32 +622,39 @@ class ConsensusStateMachine:
                 if entry.get('type') == 'verifier' and entry.get('valid'):
                     latest_verifier_trace = entry.get('trace', '')
                     break
-        except Exception: pass
+        except Exception:
+            pass
 
         # 3. Map directly to your validated reclassify_template.txt variables
         format_data = {
-            'title': paper.get('title', ''), 'abstract': paper.get('abstract', ''),
-            'keywords': paper.get('keywords', ''), 'authors': paper.get('authors', ''),
-            'year': paper.get('year', ''), 'type': paper.get('type', ''), 'journal': paper.get('journal', ''),
-            
-            # Pass the EXACT raw LLM output as the JSON string. 
+            'title': paper.get('title', ''),
+            'abstract': self._abstract_text,
+            'keywords': paper.get('keywords', ''),
+            'authors': paper.get('authors', ''),
+            'year': paper.get('year', ''),
+            'type': paper.get('type', ''),
+            'journal': paper.get('journal', ''),
+            # Pass the EXACT raw LLM output as the JSON string.
             # No manual reconstruction needed! The LLM sees exactly what it spit out last time.
             'previous_classification_json': json.dumps(prev_class, indent=2),
-            
             'reasoning_trace': latest_classifier_trace,
             'verifier_trace': latest_verifier_trace,
             'user_trace': paper.get('user_trace', '') or '',
         }
-        
+
         return {
             'task_type': TASK_RECLASSIFY,
             'task_id': f"{self.paper_id}_set{self.set_num}_consensus_reclassify_{self.iteration}",
-            'paper_id': self.paper_id, 'set_num': self.set_num, 'model_alias': self.model_alias,
-            'prompt': self.reclassify_template.format(**format_data), 'state_machine': self
+            'paper_id': self.paper_id,
+            'set_num': self.set_num,
+            'model_alias': self.model_alias,
+            'prompt': self.reclassify_template.format(**format_data),
+            'state_machine': self
         }
 
     def on_task_complete(self, success, llm_data, model_name, reasoning_trace, json_result):
         """Callback when a consensus task completes."""
+        prefix = "(PDF) " if self.pdf_used else ""
         if success and llm_data:
             if self.current_task_type == TASK_CLASSIFY or self.current_task_type == TASK_RECLASSIFY:
                 is_valid, invalid_reason = config.validate_llm_output(llm_data, 'classify')
@@ -586,7 +662,7 @@ class ConsensusStateMachine:
                 
                 if is_valid:
                     db.update_set_cache(self.paper_id, self.set_num, llm_data, model_name, reasoning_trace, json_result, valid=True, log_type=log_type, reset_verification=True)
-                    db.recalculate_main_set(self.paper_id, changed_by=f"Consensus_Classify_{self.iteration}")
+                    db.recalculate_main_set(self.paper_id, changed_by=f"{prefix}Consensus_Classify_{self.iteration}")
                 else:
                     log(f"{_color_prefix('INVALID:', Colors.ERROR)} paper={self.paper_id} set={self.set_num} reason={invalid_reason}")
                     db.update_set_log_only(self.paper_id, self.set_num, log_type, model_name, reasoning_trace, json_result, valid=False, invalid_reason=invalid_reason)
@@ -595,7 +671,7 @@ class ConsensusStateMachine:
                 is_valid, invalid_reason = config.validate_llm_output(llm_data, 'verify')
                 if is_valid:
                     db.update_set_verifier(self.paper_id, self.set_num, llm_data, model_name, reasoning_trace, json_result, valid=True)
-                    db.recalculate_main_set(self.paper_id, changed_by=f"Consensus_Verify_{self.iteration}")
+                    db.recalculate_main_set(self.paper_id, changed_by=f"{prefix}Consensus_Verify_{self.iteration}")
                 else:
                     log(f"{_color_prefix('INVALID:', Colors.ERROR)} paper={self.paper_id} set={self.set_num} reason={invalid_reason}")
                     db.update_set_log_only(self.paper_id, self.set_num, "verifier", model_name, reasoning_trace, json_result, valid=False, invalid_reason=invalid_reason)
@@ -630,11 +706,15 @@ class ScreeningStateMachine:
         self.model_alias = model_alias
         self.llm_params = llm_params
         self.completion_callback = None
+        self.pdf_used = False
 
     def get_prompts(self):
         paper = db.get_paper_by_id(self.paper_id)
         if not paper:
             return []
+
+        abstract_text, self.pdf_used = _get_paper_content_for_prompt(paper)
+
         task = {
             'task_type': TASK_SCREEN,
             'task_id': f"{self.paper_id}_set{self.set_num}_screen",
@@ -644,7 +724,7 @@ class ScreeningStateMachine:
             'llm_params': self.llm_params,
             'prompt': self.prompt_template.format(
                 title=paper.get('title', ''),
-                abstract=paper.get('abstract', ''),
+                abstract=abstract_text,
                 keywords=paper.get('keywords', ''),
                 authors=paper.get('authors', ''),
                 year=paper.get('year', ''),
@@ -692,7 +772,9 @@ class ScreeningStateMachine:
                                 self.paper_id, set_num, screened, model_name,
                                 trace, json.dumps(screened), valid=True, log_type="screener"
                             )
-                            db.recalculate_main_set(self.paper_id, changed_by=f"LLM_Screen_Set{set_num}")
+                            prefix = "(PDF) " if self.pdf_used else ""
+                            changed_by = f"{prefix}LLM_Screen_Set{set_num}"
+                            db.recalculate_main_set(self.paper_id, changed_by=changed_by)
                     else:
                         # Above threshold: screener flagged it, but not off-topic enough.
                         # Log as VALID so /screen never retries this set.

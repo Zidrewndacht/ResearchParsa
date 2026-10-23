@@ -12,7 +12,7 @@ Your job is NOT to reclassify the paper. Your job is to audit the agents' work:
 Paper under review:
 Title: {title}
 Keywords: {keywords}
-Abstract: {abstract}
+Abstract / Full Paper (when available): {abstract}
 
 The classification instructions the agents were supposed to follow:
 {configurable_classify_instructions}

@@ -28,12 +28,12 @@ Please notice that the null may also have been recorded as None. Both are correc
 Now, here is the Paper Content (real data) for your task:
 
 *Title:* {title}
-*Abstract:* {abstract}
 *Keywords:* {keywords}
 *Authors:* {authors}
 *Publication Year:* {year}
 *Publication Type:* {type}
 *Publication Name:* {journal}
+*Abstract / Full Paper (when available):* {abstract}
 
 Automated Classification to Verify (inferred by a language model):
 

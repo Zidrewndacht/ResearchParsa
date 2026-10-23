@@ -314,13 +314,13 @@ def main():
         # "LICENSE",
         
         #### #### # Prompt templates
-        # "prompt_templates/base_templates/classify_base_template.txt",
-        # "prompt_templates/base_templates/reclassify_base_template.txt",
-        # "prompt_templates/base_templates/verify_base_template.txt",
-        # "prompt_templates/base_templates/trace_review_base_template.txt",
-        # "prompt_templates/configurable_classify_instructions.txt",
-        # "prompt_templates/configurable_classify_output_template.txt",
-        # "prompt_templates/configurable_few_shot_examples.txt",
+        "prompt_templates/base_templates/classify_base_template.txt",
+        "prompt_templates/base_templates/reclassify_base_template.txt",
+        "prompt_templates/base_templates/verify_base_template.txt",
+        "prompt_templates/base_templates/trace_review_base_template.txt",
+        "prompt_templates/configurable_classify_instructions.txt",
+        "prompt_templates/configurable_classify_output_template.txt",
+        "prompt_templates/configurable_few_shot_examples.txt",
         
         #### #### # Queue manager module
         "queue_manager/__init__.py",
@@ -335,7 +335,7 @@ def main():
         # "meta/agreement_3sets_cli_v1.4.py",
         # "meta/time_power_charts_v1.4.py",
         
-        #### #### # Shared module
+        #### ####7739 # Shared module
         # "shared/__init__.py",
         "shared/config.py",
         "shared/db.py",
