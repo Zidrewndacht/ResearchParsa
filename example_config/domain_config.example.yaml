@@ -143,6 +143,10 @@ groups:
         label: "Insufficient"
       - key: "solder_excess"
         label: "Excessive"
+      - key: "solder_bridge"
+        label: "Bridge"
+      - key: "solder_ball"
+        label: "Ball"
       - key: "solder_void"
         label: "Void / Hole"
       - key: "solder_crack"
@@ -164,6 +168,15 @@ groups:
         highlight: true
       - key: "orientation"
         label: "Orientation"
+        highlight: true
+      - key: "component_tombstone"
+        label: "Tombstone"
+        highlight: true
+      - key: "component_billboard"
+        label: "Billboard"
+        highlight: true
+      - key: "component_alignment_overhang"
+        label: "Align/Overhang"
         highlight: true
       - key: "component_other"
         label: "Comp (Other)"
