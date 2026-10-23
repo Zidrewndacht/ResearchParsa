@@ -314,8 +314,9 @@ def plan_consensus_actions(paper):
 
 # Set to True to dump every PDF-augmented prompt to logs/pdf_prompts/
 # for manual inspection. Disable in production to save disk space.
-# PDF_PROMPT_DUMP_ENABLED = os.environ.get("PARSA_PDF_PROMPT_DUMP", "1") == "1"
-PDF_PROMPT_DUMP_ENABLED = 0 #forced disabled for now.
+PDF_PROMPT_DUMP_ENABLED = os.environ.get("PARSA_PDF_PROMPT_DUMP", "1") == "1"
+
+# PDF_PROMPT_DUMP_ENABLED = 0 #forced disabled for now.
 def _dump_pdf_prompt(paper_id, set_num, task_type, prompt_text):
     """Write the full assembled prompt to a debug file for inspection."""
     if not PDF_PROMPT_DUMP_ENABLED:

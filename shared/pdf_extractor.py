@@ -23,6 +23,14 @@ else:
 
 from shared import config
 
+# Extraction size guards.
+# Below MIN the output is almost certainly just headers/footers with no real
+# content (e.g. a copyright banner); the caller will fall back to the stored
+# abstract.  Above MAX we truncate — 100 000 chars (~100 kB) is far more than
+# any classification prompt needs.
+MIN_PDF_TEXT_CHARS = 1000
+MAX_PDF_TEXT_CHARS = 100_000
+
 
 _PAGE_NUMBER_RE = re.compile(
     r'^\s*(?:page\s+)?\d{1,4}\s*(?:of\s+\d{1,4})?\s*$',
@@ -185,4 +193,31 @@ def extract_pdf_markdown(paper_id, pdf_filename=None) -> Optional[str]:
     finally:
         doc.close()
 
-    return _clean_extracted_text(raw_text)
+    cleaned = _clean_extracted_text(raw_text)
+
+    if cleaned is None:
+        return None
+
+    # Reject suspiciously small extractions (likely just copyright banners
+    # or conference headers with no actual paper content).
+    if len(cleaned) < MIN_PDF_TEXT_CHARS:
+        print(f"[PDF] Extracted text too small ({len(cleaned)} chars), "
+              f"treating as empty for {pdf_path}")
+        return None
+
+    # Clamp to maximum size, cutting at a paragraph boundary when possible,
+    # and leave an explicit marker so the downstream prompt can reason about
+    # the cutoff instead of treating it as the natural end of the paper.
+    if len(cleaned) > MAX_PDF_TEXT_CHARS:
+        cut = cleaned.rfind('\n\n', 0, MAX_PDF_TEXT_CHARS)
+        if cut == -1:
+            cut = cleaned.rfind('\n', 0, MAX_PDF_TEXT_CHARS)
+        if cut == -1:
+            cut = MAX_PDF_TEXT_CHARS
+        cleaned = cleaned[:cut].rstrip()
+        cleaned += (
+            "\n\n[NOTE: The full paper text was truncated at this point due to length limits. "
+            "The remaining sections were not included in this excerpt.]"
+        )
+
+    return cleaned
