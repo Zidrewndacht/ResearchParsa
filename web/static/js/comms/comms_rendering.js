@@ -56,15 +56,15 @@ function renderVerifiedBy(value) {
 
 // --- Helper function to render changed_by value as emoji (Client-Side) ---
 function renderChangedBy(value) {
-    // This replicates the logic from Python's render_changed_by function
     if (value === 'user') {
         return '<span title="User">👤</span>';
     } else if (value === null || value === undefined || value === '') {
         return '<span title="Unknown">❔</span>';
     } else {
-        // Escape the model name for HTML attribute safety (basic escaping)
-        // Using a simple replace for quotes. For more robust escaping, consider a library.
         let escapedModelName = String(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        if (String(value).startsWith('(PDF) ')) {
+            return `<span title="${escapedModelName}">📕</span>`;
+        }
         return `<span title="${escapedModelName}">🖥️</span>`;
     }
 }

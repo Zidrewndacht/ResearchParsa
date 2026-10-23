@@ -49,8 +49,9 @@ def render_changed_by(value):
     elif value is None or value == '':
         return '<span title="Unknown">❔</span>' # Question mark for null/empty
     else:
-        # For any other string, value is a model name, show computer emoji with tooltip
         escaped_model_name = str(value).replace('"', '&quot;').replace("'", "&#39;")
+        if str(value).startswith('(PDF) '):
+            return f'<span title="{escaped_model_name}">📕</span>'
         return f'<span title="{escaped_model_name}">🖥️</span>'
     
 def render_changed_by_filter(value):

@@ -513,58 +513,43 @@ def handle_review_traces():
     log(f"{_color_prefix('COMPLETE:', Colors.VLLM_COMPLETE)} trace review paper={paper_id}")
     return jsonify({'status': 'success', 'paper_id': paper_id})
 
-
 @queue_bp.route('/debug/pdf_extract', methods=['GET'])
 def debug_pdf_extract():
     """
     Debug endpoint: extract PDF markdown for a given paper_id without
-    running any classification. Returns the extracted text or an error.
+    running any classification. Returns the extracted text directly as 
+    plain text so it renders properly in the browser.
 
     Usage: GET /debug/pdf_extract?paper_id=<id>
     """
+    from flask import Response
     from shared.pdf_extractor import extract_pdf_markdown
 
     paper_id = request.args.get('paper_id')
     if not paper_id:
-        return jsonify({'status': 'error', 'message': 'paper_id query param is required'}), 400
+        return Response('Error: paper_id query param is required', status=400, mimetype='text/plain')
 
     paper = db.get_paper_by_id(paper_id)
     if not paper:
-        return jsonify({'status': 'error', 'message': f'Paper {paper_id} not found'}), 404
+        return Response(f'Error: Paper {paper_id} not found', status=404, mimetype='text/plain')
 
     if not paper.get('pdf_filename'):
-        return jsonify({
-            'status': 'no_pdf',
-            'paper_id': paper_id,
-            'message': 'Paper has no pdf_filename in database',
-        }), 200
+        return Response(f'No PDF: Paper {paper_id} has no pdf_filename in database', status=200, mimetype='text/plain')
 
     try:
         markdown_text = extract_pdf_markdown(paper_id, paper.get('pdf_filename'))
     except Exception as exc:
-        return jsonify({
-            'status': 'error',
-            'paper_id': paper_id,
-            'message': f'Extraction raised: {exc}',
-        }), 500
+        return Response(f'Error: Extraction raised: {exc}', status=500, mimetype='text/plain')
 
     if markdown_text is None:
-        return jsonify({
-            'status': 'extraction_failed',
-            'paper_id': paper_id,
-            'pdf_filename': paper.get('pdf_filename'),
-            'message': 'extract_pdf_markdown returned None (file missing or unreadable)',
-        }), 200
+        return Response(
+            f'Extraction failed: extract_pdf_markdown returned None for {paper.get("pdf_filename")}', 
+            status=200, 
+            mimetype='text/plain'
+        )
 
-    return jsonify({
-        'status': 'success',
-        'paper_id': paper_id,
-        'pdf_filename': paper.get('pdf_filename'),
-        'text_length': len(markdown_text),
-        'markdown': markdown_text,
-    }), 200
-
-
+    # Return raw text so the browser displays the line breaks correctly
+    return Response(markdown_text, mimetype='text/plain; charset=utf-8')
 
 @queue_bp.app_errorhandler(404)
 def not_found(e):

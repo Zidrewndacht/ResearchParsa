@@ -47,6 +47,9 @@ const tableRenderer = (() => {
         if (value === 'user') return '<span title="User">👤</span>';
         if (value === null || value === undefined || value === '') return '<span title="Unknown">❔</span>';
         const escaped = esc(value);
+        if (String(value).startsWith('(PDF) ')) {
+            return `<span title="${escaped}">📕</span>`;
+        }
         return `<span title="${escaped}">🖥️</span>`;
     }
 

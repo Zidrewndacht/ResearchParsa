@@ -313,21 +313,21 @@ def main():
         # "README.md",
         # "LICENSE",
         
-        #### #### # Prompt templates
-        "prompt_templates/base_templates/classify_base_template.txt",
-        "prompt_templates/base_templates/reclassify_base_template.txt",
-        "prompt_templates/base_templates/verify_base_template.txt",
-        "prompt_templates/base_templates/trace_review_base_template.txt",
-        "prompt_templates/configurable_classify_instructions.txt",
-        "prompt_templates/configurable_classify_output_template.txt",
-        "prompt_templates/configurable_few_shot_examples.txt",
+        # #### #### # Prompt templates
+        # "prompt_templates/base_templates/classify_base_template.txt",
+        # "prompt_templates/base_templates/reclassify_base_template.txt",
+        # "prompt_templates/base_templates/verify_base_template.txt",
+        # "prompt_templates/base_templates/trace_review_base_template.txt",
+        # "prompt_templates/configurable_classify_instructions.txt",
+        # "prompt_templates/configurable_classify_output_template.txt",
+        # "prompt_templates/configurable_few_shot_examples.txt",
         
-        #### #### # Queue manager module
-        "queue_manager/__init__.py",
-        "queue_manager/dispatcher.py",
-        "queue_manager/logging_utils.py",
-        "queue_manager/routes.py",
-        "queue_manager/state.py",
+        # #### #### # Queue manager module
+        # "queue_manager/__init__.py",
+        # "queue_manager/dispatcher.py",
+        # "queue_manager/logging_utils.py",
+        # "queue_manager/routes.py",
+        # "queue_manager/state.py",
 
         #### #### # Meta module
         # "meta/agreement_core.py",
@@ -337,8 +337,8 @@ def main():
         
         #### ####7739 # Shared module
         # "shared/__init__.py",
-        "shared/config.py",
-        "shared/db.py",
+        # "shared/config.py",
+        # "shared/db.py",
         
         # #### #### #Web module
         # "web/__init__.py",
@@ -352,20 +352,20 @@ def main():
         # #### "web/LICENSE",
         
         # #Web static files
-        # "web/static/js/core/export_renderers.js",
-        # "web/static/js/core/papers_store.js",
-        # "web/static/js/core/table_renderer.js",
-        # "web/static/js/core/virtual_scroll.js",
-        # "web/static/js/comms/comms_batch.js",
-        # "web/static/js/comms/comms_files.js",
-        # "web/static/js/comms/comms_rendering.js",
-        # "web/static/js/comms/comms_save.js",
-        # "web/static/js/comms/comms_views.js",
-        # "web/static/js/filtering/filtering_actions.js",
-        # "web/static/js/filtering/filtering_engine.js",
-        # "web/static/js/filtering/filtering_init.js",
-        # "web/static/js/filtering/filtering_state.js",
-        # "web/static/js/ghpages.js",
+        "web/static/js/core/export_renderers.js",
+        "web/static/js/core/papers_store.js",
+        "web/static/js/core/table_renderer.js",
+        "web/static/js/core/virtual_scroll.js",
+        "web/static/js/comms/comms_batch.js",
+        "web/static/js/comms/comms_files.js",
+        "web/static/js/comms/comms_rendering.js",
+        "web/static/js/comms/comms_save.js",
+        "web/static/js/comms/comms_views.js",
+        "web/static/js/filtering/filtering_actions.js",
+        "web/static/js/filtering/filtering_engine.js",
+        "web/static/js/filtering/filtering_init.js",
+        "web/static/js/filtering/filtering_state.js",
+        "web/static/js/ghpages.js",
         # "web/static/js/stats/stats_core.js",
         # "web/static/js/stats/stats_generic.js",
         # "web/static/js/stats/stats_domain.js",
@@ -384,15 +384,15 @@ def main():
         
         # #### #### #Web templates
         # "web/templates/agreement_report.html",
-        # "web/templates/detail_row.html",
-        # "web/templates/history_row.html",
-        # "web/templates/index.html",
-        # "web/templates/shared/about_modal_content.html",
-        # "web/templates/shared/detail_form.html",
-        # "web/templates/shared/history_table.html",
-        # "web/templates/shared/papers_table_tfoot.html",
-        # "web/templates/shared/stats_modal_content.html",
-        # "web/templates/shared/table_colgroup.html",
+        "web/templates/detail_row.html",
+        "web/templates/history_row.html",
+        "web/templates/index.html",
+        "web/templates/shared/about_modal_content.html",
+        "web/templates/shared/detail_form.html",
+        "web/templates/shared/history_table.html",
+        "web/templates/shared/papers_table_tfoot.html",
+        "web/templates/shared/stats_modal_content.html",
+        "web/templates/shared/table_colgroup.html",
         # "web/templates/static_export/loader.html",
         # "web/templates/static_export/index_static_export.html",
     ]

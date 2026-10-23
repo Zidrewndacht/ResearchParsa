@@ -35,6 +35,7 @@ Now, here is the Paper Content (real data) for your task:
 *Publication Name:* {journal}
 *Abstract / Full Paper (when available):* {abstract}
 
+-----
 Automated Classification to Verify (inferred by a language model):
 
 {previous_classification_json}

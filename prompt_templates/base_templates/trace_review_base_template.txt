@@ -14,6 +14,7 @@ Title: {title}
 Keywords: {keywords}
 Abstract / Full Paper (when available): {abstract}
 
+-----
 The classification instructions the agents were supposed to follow:
 {configurable_classify_instructions}
 
@@ -35,4 +36,5 @@ The output schema the agents were supposed to produce:
 {log_set_3}
 ```
 
+-----
 Write a free-form, well-structured audit report in legible plain text (no Markdown, no formatting, double return for paragraphs). The interface has automatic word wrap, don't wrap at arbitrary column length for no reason. Be specific: quote conflicting values, reference entry numbers/timestamps, and explain the likely root cause of each disagreement. End with a *short* "Bottom line" section stating the main found issue, if any, and whether the resulting averaged consensus for this paper should be trusted.

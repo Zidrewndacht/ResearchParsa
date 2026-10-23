@@ -25,6 +25,7 @@ Please re-evaluate the paper based on its content (Title, Abstract, Keywords, Au
 *Abstract / Full Paper (when available):* {abstract}
 
 
+-----
 Below is the original classification and verification data, for reference on the reasoning behind the lack of consensus between original classifier and verifier. If you believe the *previous classification* was correct based on the paper content, feel free to repeat it. If you find the previous classification was indeed wrong, provide the corrected one.
 
 Previous Classification JSON:
@@ -40,6 +41,7 @@ Previous User Trace (Comments):
 {user_trace}
 
 
+-----
 Remember, your response is not being read by a human, it goes directly to an automated parser. 
 
 You have a classification task, NOT a verification task. Output a new classification JSON that's likely to be accepted by a new verifier in the future. Output only the result in JSON format in plaintext without any other tags like ```json or similar.

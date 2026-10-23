@@ -314,8 +314,8 @@ def plan_consensus_actions(paper):
 
 # Set to True to dump every PDF-augmented prompt to logs/pdf_prompts/
 # for manual inspection. Disable in production to save disk space.
-PDF_PROMPT_DUMP_ENABLED = os.environ.get("PARSA_PDF_PROMPT_DUMP", "1") == "1"
-
+# PDF_PROMPT_DUMP_ENABLED = os.environ.get("PARSA_PDF_PROMPT_DUMP", "1") == "1"
+PDF_PROMPT_DUMP_ENABLED = 0 #forced disabled for now.
 def _dump_pdf_prompt(paper_id, set_num, task_type, prompt_text):
     """Write the full assembled prompt to a debug file for inspection."""
     if not PDF_PROMPT_DUMP_ENABLED:
@@ -419,13 +419,12 @@ class ClassificationStateMachine:
 
     def on_set_complete(self, set_num, success, llm_data, model_name, reasoning_trace, json_result):
         """Callback when this single set classification completes."""
-        prefix = "(PDF) " if self.pdf_used else ""
-        changed_by = f"{prefix}LLM_Classify_Set{set_num}"
         if success and llm_data:
             is_valid, invalid_reason = config.validate_llm_output(llm_data, 'classify')
             if is_valid:
-                db.update_set_cache(self.paper_id, set_num, llm_data, model_name, reasoning_trace, json_result, valid=True)
-                db.recalculate_main_set(self.paper_id, changed_by=changed_by)
+                effective_model = f"(PDF) {model_name}" if self.pdf_used else model_name
+                db.update_set_cache(self.paper_id, set_num, llm_data, effective_model, reasoning_trace, json_result, valid=True)
+                db.recalculate_main_set(self.paper_id, changed_by=f"LLM_Classify_Set{set_num}")
             else:
                 log(f"{_color_prefix('INVALID:', Colors.ERROR)} paper={self.paper_id} set={set_num} reason={invalid_reason}")
                 db.update_set_log_only(self.paper_id, set_num, "classifier", model_name, reasoning_trace, json_result, valid=False, invalid_reason=invalid_reason)
@@ -494,13 +493,12 @@ class VerificationStateMachine:
 
     def on_set_complete(self, set_num, success, llm_data, model_name, reasoning_trace, json_result):
         """Callback when this single set verification completes."""
-        prefix = "(PDF) " if self.pdf_used else ""
-        changed_by = f"{prefix}LLM_Verify_Set{set_num}"
         if success and llm_data:
             is_valid, invalid_reason = config.validate_llm_output(llm_data, 'verify')
             if is_valid:
-                db.update_set_verifier(self.paper_id, set_num, llm_data, model_name, reasoning_trace, json_result, valid=True)
-                db.recalculate_main_set(self.paper_id, changed_by=changed_by)
+                effective_model = f"(PDF) {model_name}" if self.pdf_used else model_name
+                db.update_set_verifier(self.paper_id, set_num, llm_data, effective_model, reasoning_trace, json_result, valid=True)
+                db.recalculate_main_set(self.paper_id, changed_by=f"LLM_Verify_Set{set_num}")
             else:
                 log(f"{_color_prefix('INVALID:', Colors.ERROR)} paper={self.paper_id} set={set_num} reason={invalid_reason}")
                 db.update_set_log_only(self.paper_id, set_num, "verifier", model_name, reasoning_trace, json_result, valid=False, invalid_reason=invalid_reason)
@@ -717,15 +715,15 @@ class ConsensusStateMachine:
 
     def on_task_complete(self, success, llm_data, model_name, reasoning_trace, json_result):
         """Callback when a consensus task completes."""
-        prefix = "(PDF) " if self.pdf_used else ""
         if success and llm_data:
             if self.current_task_type == TASK_CLASSIFY or self.current_task_type == TASK_RECLASSIFY:
                 is_valid, invalid_reason = config.validate_llm_output(llm_data, 'classify')
                 log_type = "consensus" if self.current_task_type == TASK_RECLASSIFY else "classifier"
                 
                 if is_valid:
-                    db.update_set_cache(self.paper_id, self.set_num, llm_data, model_name, reasoning_trace, json_result, valid=True, log_type=log_type, reset_verification=True)
-                    db.recalculate_main_set(self.paper_id, changed_by=f"{prefix}Consensus_Classify_{self.iteration}")
+                    effective_model = f"(PDF) {model_name}" if self.pdf_used else model_name
+                    db.update_set_cache(self.paper_id, self.set_num, llm_data, effective_model, reasoning_trace, json_result, valid=True, log_type=log_type, reset_verification=True)
+                    db.recalculate_main_set(self.paper_id, changed_by=f"Consensus_Classify_{self.iteration}")
                 else:
                     log(f"{_color_prefix('INVALID:', Colors.ERROR)} paper={self.paper_id} set={self.set_num} reason={invalid_reason}")
                     db.update_set_log_only(self.paper_id, self.set_num, log_type, model_name, reasoning_trace, json_result, valid=False, invalid_reason=invalid_reason)
@@ -733,8 +731,9 @@ class ConsensusStateMachine:
             elif self.current_task_type == TASK_VERIFY:
                 is_valid, invalid_reason = config.validate_llm_output(llm_data, 'verify')
                 if is_valid:
-                    db.update_set_verifier(self.paper_id, self.set_num, llm_data, model_name, reasoning_trace, json_result, valid=True)
-                    db.recalculate_main_set(self.paper_id, changed_by=f"{prefix}Consensus_Verify_{self.iteration}")
+                    effective_model = f"(PDF) {model_name}" if self.pdf_used else model_name
+                    db.update_set_verifier(self.paper_id, self.set_num, llm_data, effective_model, reasoning_trace, json_result, valid=True)
+                    db.recalculate_main_set(self.paper_id, changed_by=f"Consensus_Verify_{self.iteration}")
                 else:
                     log(f"{_color_prefix('INVALID:', Colors.ERROR)} paper={self.paper_id} set={self.set_num} reason={invalid_reason}")
                     db.update_set_log_only(self.paper_id, self.set_num, "verifier", model_name, reasoning_trace, json_result, valid=False, invalid_reason=invalid_reason)
@@ -837,13 +836,12 @@ class ScreeningStateMachine:
                                 'verified': True,
                                 'estimated_score': SCREENING_VERIFIED_SCORE,
                             }
+                            effective_model = f"(PDF) {model_name}" if self.pdf_used else model_name
                             db.update_set_cache(
-                                self.paper_id, set_num, screened, model_name,
+                                self.paper_id, set_num, screened, effective_model,
                                 trace, json.dumps(screened), valid=True, log_type="screener"
                             )
-                            prefix = "(PDF) " if self.pdf_used else ""
-                            changed_by = f"{prefix}LLM_Screen_Set{set_num}"
-                            db.recalculate_main_set(self.paper_id, changed_by=changed_by)
+                            db.recalculate_main_set(self.paper_id, changed_by=f"LLM_Screen_Set{set_num}")
                     else:
                         # Above threshold: screener flagged it, but not off-topic enough.
                         # Log as VALID so /screen never retries this set.
