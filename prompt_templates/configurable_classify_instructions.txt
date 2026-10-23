@@ -14,9 +14,9 @@ Read all the paper data once, and:
    - If relevance ≥ 4 → false. Proceed to fill downstream fields.
 
 3. For each field, ask:
-   - Is there a direct keyword match? (e.g., 'solder bridge' → solder_excess: true)
+   - Is there a direct keyword match? (e.g., 'solder bridge' → solder_bridge: true; 'solder ball' → solder_ball: true; 'tombstone' → component_tombstone: true; 'billboard' → component_billboard: true; 'overhang' → component_alignment_overhang: true)
    - Is there a direct keyword exclusion? (e.g., 'fully template matching-based pipeline' → classic_cv_based: true, ml_traditional: false, dl_*: false)
-   - Is there a semantic match: synonym or unambiguous paraphrase? (e.g., 'cold weld' → solder_crack: true)
+   - Is there a semantic match: synonym or unambiguous paraphrase? (e.g., 'cold weld' → solder_crack: true; 'component standing on one end' → component_tombstone: true)
    - Is the modality logically incompatible? (e.g., 'for BGA only' → is_tht: false, is_smt: true)
    - If none of the above apply → set null. When in doubt, prefer null.
 

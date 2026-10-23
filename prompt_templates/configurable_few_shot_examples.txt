@@ -1,4 +1,3 @@
-
 Title: “Self-Supervised Representation Learning for Electronic Board Inspection”
 Abstract: “We introduce a masked-image modeling framework pre-trained on unlabeled industrial PCB imagery. The learned CNN backbone significantly improves downstream detection accuracy when fine-tuned on standard automated optical inspection benchmarks. Our approach reduces reliance on large labeled datasets while maintaining robustness across varying board layouts and lighting conditions.”
 Keywords: self-supervised learning, PCB inspection, computer vision, automated optical inspection, representation learning
@@ -16,12 +15,17 @@ Keywords: self-supervised learning, PCB inspection, computer vision, automated o
     "bare_pcb_other": null,
     "solder_insufficient": null,
     "solder_excess": null,
+    "solder_bridge": null,
+    "solder_ball": null,
     "solder_void": null,
     "solder_crack": null,
     "solder_other": null,
     "orientation": null,
     "wrong_component": null,
     "missing_component": null,
+    "component_tombstone": null,
+    "component_billboard": null,
+    "component_alignment_overhang": null,
     "component_other": null,
     "cosmetic": null,
     "other": ""
@@ -61,16 +65,21 @@ Keywords: AOI, PCBA, SMT, solder bridging, insufficient paste, tombstoning, qual
     "holes": false,
     "bare_pcb_other": false,
     "solder_insufficient": true,
-    "solder_excess": true,
+    "solder_excess": false,
+    "solder_bridge": true,
+    "solder_ball": false,
     "solder_void": false,
     "solder_crack": false,
     "solder_other": false,
-    "orientation": true,
+    "orientation": false,
     "wrong_component": true,
     "missing_component": false,
+    "component_tombstone": true,
+    "component_billboard": false,
+    "component_alignment_overhang": false,
     "component_other": true,
     "cosmetic": false,
-    "other": "tombstoning, pad oxidation, lifted leads"
+    "other": "pad oxidation, lifted leads"
   }},
   "technique": {{
     "classic_cv_based": null,
@@ -86,7 +95,7 @@ Keywords: AOI, PCBA, SMT, solder bridging, insufficient paste, tombstoning, qual
   }}
 }}
 
-Justification: Explicitly lists solder and PCBA defects, so corresponding feature fields are true, others false, with extra defects captured in other. Provides zero algorithmic or methodological details, forcing all technique fields to null. Relevance 4 matches the "general PCB/AOI context but lacks implementation details/techniques" bin.
+Justification: Explicitly lists solder and PCBA defects. Solder bridging maps to solder_bridge rather than solder_excess; tombstoning maps to component_tombstone; misplaced capacitors map to wrong_component. Pad oxidation and lifted leads are captured in other/component_other. Provides zero algorithmic or methodological details, forcing all technique fields to null. Relevance 4 matches the "general PCB/AOI context but lacks implementation details/techniques" bin.
 
 ---
 
@@ -108,12 +117,17 @@ Keywords: missing component, CNN, SMT, PCBA
     "bare_pcb_other": false,
     "solder_insufficient": false,
     "solder_excess": false,
+    "solder_bridge": false,
+    "solder_ball": false,
     "solder_void": false,
     "solder_crack": false,
     "solder_other": false,
     "orientation": false,
     "wrong_component": false,
     "missing_component": true,
+    "component_tombstone": false,
+    "component_billboard": false,
+    "component_alignment_overhang": false,
     "component_other": false,
     "cosmetic": false,
     "other": ""
@@ -154,12 +168,17 @@ Keywords: solder paste, AOI, fine-pitch, stencil printing
     "bare_pcb_other": false,
     "solder_insufficient": true,
     "solder_excess": true,
+    "solder_bridge": false,
+    "solder_ball": false,
     "solder_void": false,
     "solder_crack": false,
     "solder_other": false,
     "orientation": false,
     "wrong_component": false,
     "missing_component": false,
+    "component_tombstone": false,
+    "component_billboard": false,
+    "component_alignment_overhang": false,
     "component_other": false,
     "cosmetic": false,
     "other": ""
@@ -178,7 +197,7 @@ Keywords: solder paste, AOI, fine-pitch, stencil printing
   }}
 }}
 
-Justification: the phrase “before component placement” and “fine-pitch pads” strongly implies SMT even though the acronym is absent; hence **is_smt** = true. Solder-insufficient/excess are explicit.
+Justification: the phrase “before component placement” and “fine-pitch pads” strongly implies SMT even though the acronym is absent; hence **is_smt** = true. Solder-insufficient/excess are explicit. Solder_bridge and solder_ball are false because only paste volume/deposit excess is mentioned, not bridges or balls.
 
 ---
 
@@ -200,15 +219,20 @@ Keywords: PCB inspection, survey, defect review
     "bare_pcb_other": true,
     "solder_insufficient": null,
     "solder_excess": null,
+    "solder_bridge": null,
+    "solder_ball": null,
     "solder_void": null,
-    "solder_crack": null,
+    "solder_crack": true,
     "solder_other": true,
     "orientation": null,
     "wrong_component": null,
     "missing_component": null,
+    "component_tombstone": true,
+    "component_billboard": null,
+    "component_alignment_overhang": null,
     "component_other": true,
     "cosmetic": null,
-    "other": "lifted pads, mouse-bites, cold solder joints, tombstoned components"
+    "other": "lifted pads, mouse-bites"
   }},
   "technique": {{
     "classic_cv_based": true,
@@ -224,7 +248,7 @@ Keywords: PCB inspection, survey, defect review
   }}
 }}
 
-Justification: broad survey ⇒ bare PCB, solder and component mentioned but most not specified; "including..." means the contents has other features not explicitly mentioned; possible but unspecified fields left null. The string field captures the extra specified defect names.
+Justification: broad survey ⇒ bare PCB, solder and component mentioned but most not specified; "including..." means the contents has other features not explicitly mentioned; possible but unspecified fields left null. Cold solder joints map to solder_crack, tombstoned components map to component_tombstone, and lifted pads/mouse-bites are bare PCB defects captured in other. Unspecified bridge/ball fields remain null.
 
 ---
 
@@ -245,13 +269,18 @@ Keywords: YOLOv5, SMT, solder bridge, missing component, dataset
     "holes": false,
     "bare_pcb_other": false,
     "solder_insufficient": true,
-    "solder_excess": true,
+    "solder_excess": false,
+    "solder_bridge": true,
+    "solder_ball": null,
     "solder_void": null,
     "solder_crack": null,
     "solder_other": false,
     "orientation": false,
     "wrong_component": false,
     "missing_component": true,
+    "component_tombstone": false,
+    "component_billboard": false,
+    "component_alignment_overhang": false,
     "component_other": false,
     "cosmetic": false,
     "other": ""
@@ -270,8 +299,7 @@ Keywords: YOLOv5, SMT, solder bridge, missing component, dataset
   }}
 }}
 
-Justification: paper about solder and component defects, explicitly lists every defect that is set to true; solder bridges are a subset of solder_excess per prompt. No mention of bare PCB defects while everything else is explicit, so can be safely assumed false; optical imaging ⇒ is_x_ray = false; dataset released ⇒ available_dataset = true; SMT as explicit keyword ⇒ is_through_hole = false.
-
+Justification: paper about solder and component defects, explicitly lists every defect that is set to true. No mention of bare PCB defects while everything else is clearly explicit, so can be safely assumed false; optical imaging ⇒ is_x_ray = false; dataset released ⇒ available_dataset = true; SMT as explicit keyword ⇒ is_through_hole = false.
 ---
 
 Title: “Deep-learning methods for PCB defect inspection: a comprehensive survey”  
@@ -291,13 +319,18 @@ Keywords: PCB inspection, deep learning, survey, SSD, R-CNN, solder defects
     "holes": true,
     "bare_pcb_other": false,
     "solder_insufficient": false,
-    "solder_excess": true,
+    "solder_excess": false,
+    "solder_bridge": true,
+    "solder_ball": null,
     "solder_void": true,
     "solder_crack": true,
     "solder_other": false,
     "orientation": null,
     "wrong_component": null,
     "missing_component": null,
+    "component_tombstone": null,
+    "component_billboard": null,
+    "component_alignment_overhang": null,
     "component_other": true,
     "cosmetic": null,
     "other": "via misalignment, pad lifting"
@@ -338,12 +371,17 @@ Keywords: X-ray, BGA, void, ResNet-50
     "bare_pcb_other": false,
     "solder_insufficient": null,
     "solder_excess": false,
+    "solder_bridge": false,
+    "solder_ball": false,
     "solder_void": true,
     "solder_crack": null,
     "solder_other": false,
     "orientation": false,
     "wrong_component": false,
     "missing_component": false,
+    "component_tombstone": false,
+    "component_billboard": false,
+    "component_alignment_overhang": false,
     "component_other": false,
     "cosmetic": false,
     "other": ""
@@ -362,7 +400,7 @@ Keywords: X-ray, BGA, void, ResNet-50
   }}
 }}
 
-Justification: only void detection is mentioned; exclusive BGA implies SMT (and no THT); plain classifier ⇒ dl_cnn_classifier = true, remaining DL flags false; explicit private dataset ⇒ available_dataset = false.
+Justification: only void detection is mentioned; exclusive BGA implies SMT (and no THT); plain classifier ⇒ dl_cnn_classifier = true, remaining DL flags false; explicit private dataset ⇒ available_dataset = false. Bridge/ball are false because the classifier is only void vs acceptable.
 
 ---
 
@@ -384,12 +422,17 @@ Keywords: fabric inspection, textile, CNN, defect detection
     "bare_pcb_other": null,
     "solder_insufficient": null,
     "solder_excess": null,
+    "solder_bridge": null,
+    "solder_ball": null,
     "solder_void": null,
     "solder_crack": null,
     "solder_other": null,
     "orientation": null,
     "wrong_component": null,
     "missing_component": null,
+    "component_tombstone": null,
+    "component_billboard": null,
+    "component_alignment_overhang": null,
     "component_other": null,
     "cosmetic": null,
     "other": ""

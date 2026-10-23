@@ -13,7 +13,9 @@ features:             # true, false, null for unknown/unclear.
 	
 	# soldering/welding issues:
     solder_insufficient: null # too little solder, dry joint, poor fillet
-    solder_excess: null # solder ball / bridge / short between pads or leads
+    solder_excess: null # excess solder not specifically bridge/ball (e.g., excessive paste/volume, overfilled joint, solder lumps/webbing)
+    solder_bridge: null # solder bridge / bridging / short between pads, leads, or pins
+    solder_ball: null # solder balls / spheres / spatter
     solder_void: null # voids, blow-holes, pin-holes inside the joint
     solder_crack: null # fatigue cracks, fractured or “cold” joints
     solder_other: null # for any other or unspecified solder issue. Set this to true if paper talks about solder defects that are specifically different to the above (in such case set it as true *and write the 'features: other' string* at the end *with the specified type of issue*) or are *confirmed solder* defects of unspecified nature (in which case just set this as true).
@@ -22,6 +24,9 @@ features:             # true, false, null for unknown/unclear.
     orientation: null # for components installed in the correct place, but with wrong orientation (inverted polarity, wrong pin 1 placement, etc).
     wrong_component: null # for components installed in the wrong location, might also detect components being installed where none should be.
     missing_component: null # for detection of empty places where some component has to be installed (e.g. empty pads that aren't supposed to stay empty).
+    component_tombstone: null # tombstoned component (e.g., SMD component standing on one end)
+    component_billboard: null # billboarded component (e.g., component standing on its edge/side)
+    component_alignment_overhang: null # component placement misaligned or overhanging beyond tolerance (e.g., shifted/rotated SMD capacitor/resistor)
     component_other: null # for any other or unspecified component issue.  Set this to true if paper talks about component defects that are specifically different to the above (in such case set it as true *and write the 'features: other' string* at the end *with the specified type of issue*) or are *confirmed component/PCBA* defects of unspecified nature (in which case just set this as true).
 	
   # other issues:
