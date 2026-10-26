@@ -17,58 +17,131 @@ const techniquesBorderColors = [
     'hsla(180, 48%, 28%, 0.75)', 'hsla(260, 100%, 40%, 0.75)', 'hsla(30, 100%, 33%, 0.75)',
     'hsla(0, 0%, 38%, 0.75)', 'hsla(147, 48%, 38%, 0.75)'
 ];
+
+// Feature colors are grouped by defect family:
+//   0..2   : Bare PCB Defects    (green)
+//   3..9   : Solder Defects      (gray)    -- was 3..7, expanded by Bridge + Ball
+//  10..16  : PCB Assembly Defects (pink)   -- was 8..11, expanded by Tombstone/Billboard/Align-Overhang
+//  17      : Cosmetic            (blue)
+//  18      : Other               (purple)
 const featuresColorsOriginalOrder = [
+    // Bare PCB Defects (0-2)
     'hsla(130, 27%, 60%, 0.95)', 'hsla(130, 27%, 60%, 0.95)', 'hsla(130, 27%, 60%, 0.95)',
+    // Solder Defects (3-9)
     'hsla(0, 0%, 68%, 0.95)', 'hsla(0, 0%, 68%, 0.95)', 'hsla(0, 0%, 68%, 0.95)',
-    'hsla(0, 0%, 68%, 0.95)', 'hsla(0, 0%, 68%, 0.95)', 'hsla(347, 70%, 72%, 0.95)',
+    'hsla(0, 0%, 68%, 0.95)', 'hsla(0, 0%, 68%, 0.95)', 'hsla(0, 0%, 68%, 0.95)',
+    'hsla(0, 0%, 68%, 0.95)',
+    // PCB Assembly Defects (10-16)
     'hsla(347, 70%, 72%, 0.95)', 'hsla(347, 70%, 72%, 0.95)', 'hsla(347, 70%, 72%, 0.95)',
-    'hsla(204, 88%, 70%, 0.95)', 'hsla(284, 88%, 70%, 0.95)'
+    'hsla(347, 70%, 72%, 0.95)', 'hsla(347, 70%, 72%, 0.95)', 'hsla(347, 70%, 72%, 0.95)',
+    'hsla(347, 70%, 72%, 0.95)',
+    // Cosmetic (17)
+    'hsla(204, 88%, 70%, 0.95)',
+    // Other (18)
+    'hsla(284, 88%, 70%, 0.95)'
 ];
 const featuresBorderColorsOriginalOrder = [
+    // Bare PCB Defects (0-2)
     'hsla(144, 83%, 28%, 0.75)', 'hsla(144, 82%, 28%, 0.75)', 'hsla(144, 82%, 28%, 0.75)',
+    // Solder Defects (3-9)
     'hsla(0, 0%, 38%, 0.75)', 'hsla(0, 0%, 38%, 0.75)', 'hsla(0, 0%, 38%, 0.75)',
-    'hsla(0, 0%, 38%, 0.75)', 'hsla(0, 0%, 38%, 0.75)', 'hsla(347, 70%, 39%, 0.75)',
+    'hsla(0, 0%, 38%, 0.75)', 'hsla(0, 0%, 38%, 0.75)', 'hsla(0, 0%, 38%, 0.75)',
+    'hsla(0, 0%, 38%, 0.75)',
+    // PCB Assembly Defects (10-16)
     'hsla(347, 70%, 39%, 0.75)', 'hsla(347, 70%, 39%, 0.75)', 'hsla(347, 70%, 39%, 0.75)',
-    'hsla(219, 100%, 40%, 0.75)', 'hsla(284, 82%, 47%, 0.75)'
+    'hsla(347, 70%, 39%, 0.75)', 'hsla(347, 70%, 39%, 0.75)', 'hsla(347, 70%, 39%, 0.75)',
+    'hsla(347, 70%, 39%, 0.75)',
+    // Cosmetic (17)
+    'hsla(219, 100%, 40%, 0.75)',
+    // Other (18)
+    'hsla(284, 82%, 47%, 0.75)'
 ];
 
 // --- Field Mappings ---
 const FIELD_LABELS = {
-    'features.tracks': '(Bare PCB) Tracks', 'features.holes': '(Bare PCB) Holes', 'features.bare_pcb_other': '(Bare PCB) Other',
-    'features.solder_insufficient': '(Solder) Insufficient', 'features.solder_excess': '(Solder) Excess', 'features.solder_void': '(Solder) Voids',
-    'features.solder_crack': '(Solder) Cracks', 'features.solder_other': '(Solder) Other', 'features.orientation': '(PCBA) Orientation/Polarity',
-    'features.wrong_component': '(PCBA) Wrong Component', 'features.missing_component': '(PCBA) Missing Component', 'features.component_other': '(PCBA) Other',
-    'features.cosmetic': 'Cosmetic', 'features.other': 'Other',
-    'technique.classic_cv_based': 'Classic CV', 'technique.ml_traditional': 'Traditional ML', 'technique.dl_cnn_classifier': 'CNN Classifier',
-    'technique.dl_cnn_detector': 'CNN Detector', 'technique.dl_rcnn_detector': 'R-CNN Detector', 'technique.dl_transformer': 'Transformer',
-    'technique.dl_other': 'Other DL', 'technique.hybrid': 'Hybrid', 'technique.available_dataset': 'Datasets'
+    // Bare PCB
+    'features.tracks': '(Bare PCB) Tracks',
+    'features.holes': '(Bare PCB) Holes',
+    'features.bare_pcb_other': '(Bare PCB) Other',
+    // Solder (incl. new bridge + ball)
+    'features.solder_insufficient': '(Solder) Insufficient',
+    'features.solder_excess': '(Solder) Excess',
+    'features.solder_bridge': '(Solder) Bridge',
+    'features.solder_ball': '(Solder) Ball',
+    'features.solder_void': '(Solder) Voids',
+    'features.solder_crack': '(Solder) Cracks',
+    'features.solder_other': '(Solder) Other',
+    // PCBA (incl. new tombstone / billboard / align-overhang)
+    'features.missing_component': '(PCBA) Missing Component',
+    'features.wrong_component': '(PCBA) Wrong Component',
+    'features.orientation': '(PCBA) Orientation/Polarity',
+    'features.component_tombstone': '(PCBA) Tombstone',
+    'features.component_billboard': '(PCBA) Billboard',
+    'features.component_alignment_overhang': '(PCBA) Align/Overhang',
+    'features.component_other': '(PCBA) Other',
+    // Misc
+    'features.cosmetic': 'Cosmetic',
+    'features.other': 'Other',
+    // Techniques
+    'technique.classic_cv_based': 'Classic CV',
+    'technique.ml_traditional': 'Traditional ML',
+    'technique.dl_cnn_classifier': 'CNN Classifier',
+    'technique.dl_cnn_detector': 'CNN Detector',
+    'technique.dl_rcnn_detector': 'R-CNN Detector',
+    'technique.dl_transformer': 'Transformer',
+    'technique.dl_other': 'Other DL',
+    'technique.hybrid': 'Hybrid',
+    'technique.available_dataset': 'Datasets'
 };
 const TECHNIQUE_FIELDS = [
-    'technique.classic_cv_based', 'technique.ml_traditional', 'technique.dl_cnn_classifier', 'technique.dl_cnn_detector', 
+    'technique.classic_cv_based', 'technique.ml_traditional', 'technique.dl_cnn_classifier', 'technique.dl_cnn_detector',
     'technique.dl_rcnn_detector', 'technique.dl_transformer', 'technique.dl_other', 'technique.hybrid'
 ];
 const TECHNIQUE_FIELD_COLOR_MAP = {
     'technique.classic_cv_based': 0, 'technique.ml_traditional': 1, 'technique.dl_cnn_classifier': 2, 'technique.dl_cnn_detector': 3,
     'technique.dl_rcnn_detector': 4, 'technique.dl_transformer': 5, 'technique.dl_other': 6, 'technique.hybrid': 7
 };
+
+// FEATURE_FIELDS order MUST match FEATURE_FIELD_INDEX_MAP and featuresColorsOriginalOrder.
 const FEATURE_FIELDS = [
+    // Bare PCB (0-2)
     'features.tracks', 'features.holes', 'features.bare_pcb_other',
-    'features.solder_insufficient', 'features.solder_excess', 'features.solder_void', 'features.solder_crack', 'features.solder_other',
-    'features.orientation', 'features.missing_component', 'features.wrong_component', 'features.component_other',
+    // Solder (3-9)
+    'features.solder_insufficient', 'features.solder_excess', 'features.solder_bridge',
+    'features.solder_ball', 'features.solder_void', 'features.solder_crack', 'features.solder_other',
+    // PCBA (10-16)
+    'features.missing_component', 'features.wrong_component', 'features.orientation',
+    'features.component_tombstone', 'features.component_billboard', 'features.component_alignment_overhang',
+    'features.component_other',
+    // Misc
     'features.cosmetic', 'features.other'
 ];
 const FEATURE_FIELD_INDEX_MAP = {
+    // Bare PCB
     'features.tracks': 0, 'features.holes': 1, 'features.bare_pcb_other': 2,
-    'features.solder_insufficient': 3, 'features.solder_excess': 4, 'features.solder_void': 5, 'features.solder_crack': 6, 'features.solder_other': 7,
-    'features.orientation': 8, 'features.missing_component': 9, 'features.wrong_component': 10, 'features.component_other': 11,
-    'features.cosmetic': 12, 'features.other': 13
+    // Solder
+    'features.solder_insufficient': 3, 'features.solder_excess': 4, 'features.solder_bridge': 5, 'features.solder_ball': 6,
+    'features.solder_void': 7, 'features.solder_crack': 8, 'features.solder_other': 9,
+    // PCBA
+    'features.missing_component': 10, 'features.wrong_component': 11, 'features.orientation': 12,
+    'features.component_tombstone': 13, 'features.component_billboard': 14, 'features.component_alignment_overhang': 15,
+    'features.component_other': 16,
+    // Misc
+    'features.cosmetic': 17, 'features.other': 18
 };
 const featureColorGroups = {
-    0: { label: 'Bare PCB Defects', fields: ['features.tracks', 'features.holes', 'features.bare_pcb_other'] },
-    3: { label: 'Solder Defects', fields: ['features.solder_insufficient', 'features.solder_excess', 'features.solder_void', 'features.solder_crack', 'features.solder_other'] },
-    8: { label: 'PCB Assembly Defects', fields: ['features.orientation', 'features.missing_component', 'features.wrong_component', 'features.component_other'] },
-    12: { label: 'Cosmetic', fields: ['features.cosmetic'] },
-    13: { label: 'Other', fields: ['features.other'] }
+    0:  { label: 'Bare PCB Defects',        fields: ['features.tracks', 'features.holes', 'features.bare_pcb_other'] },
+    3:  { label: 'Solder Defects',          fields: [
+        'features.solder_insufficient', 'features.solder_excess', 'features.solder_bridge',
+        'features.solder_ball', 'features.solder_void', 'features.solder_crack', 'features.solder_other'
+    ] },
+    10: { label: 'PCB Assembly Defects',    fields: [
+        'features.missing_component', 'features.wrong_component', 'features.orientation',
+        'features.component_tombstone', 'features.component_billboard', 'features.component_alignment_overhang',
+        'features.component_other'
+    ] },
+    17: { label: 'Cosmetic',                fields: ['features.cosmetic'] },
+    18: { label: 'Other',                   fields: ['features.other'] }
 };
 
 // --- Data Collection Hook ---

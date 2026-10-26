@@ -1,6 +1,7 @@
 # shared/db.py
 import json
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -128,6 +129,33 @@ def _set_val_by_path(d, path, val):
         d = d.setdefault(k, {})
     d[keys[-1]] = val
 
+_LIST_SEP_RE = re.compile(r'[,;]')
+_WS_RE = re.compile(r'\s+')
+
+def dedup_text_list(value):
+    """Deduplicate items in a comma/semicolon-separated text field.
+
+    Splits on ',' and ';', collapses whitespace, drops case-insensitive
+    duplicates (first occurrence wins, its capitalization is kept) and
+    rejoins with ', '. Strings without separators are returned unchanged,
+    so single-value fields are never touched.
+    """
+    if not isinstance(value, str):
+        return value
+    if ',' not in value and ';' not in value:
+        return value
+    seen = set()
+    items = []
+    for raw_item in _LIST_SEP_RE.split(value):
+        item = _WS_RE.sub(' ', raw_item).strip().rstrip(',.').strip()
+        if not item:
+            continue
+        key = item.lower()
+        if key not in seen:
+            seen.add(key)
+            items.append(item)
+    return ', '.join(items)
+
 _BOOL_TRUE  = {1, "1", "true", "True", "TRUE", "yes", "Yes", "on", "On"}
 _BOOL_FALSE = {0, "0", "false", "False", "FALSE", "no", "No", "off", "Off"}
 
@@ -152,6 +180,12 @@ def normalize_llm_blob(blob: dict, boolean_paths: list[str] | None,
                 _set_val_by_path(blob, path, int(num) if num == int(num) else num)
             except ValueError:
                 pass
+    # Deduplicate comma/semicolon-separated list fields (model names, defect
+    # lists, ...) so repeated runs can never accumulate duplicate items.
+    for path in _get_all_paths(blob):
+        val = _get_val_by_path(blob, path)
+        if isinstance(val, str) and (',' in val or ';' in val):
+            _set_val_by_path(blob, path, dedup_text_list(val))
     return blob
 
 def init_db(db_path):
@@ -416,7 +450,7 @@ def update_paper_custom_fields(paper_id, data, changed_by="user"):
                 if value.lower() in ('true', '1', 'on'): parsed_val = True
                 elif value.lower() in ('false', '0', 'off'): parsed_val = False
                 elif value.lower() in ('', 'null', 'unknown', 'none'): parsed_val = None
-                else: parsed_val = value
+                else: parsed_val = dedup_text_list(value)   # was: parsed_val = value
             else:
                 parsed_val = value
             
@@ -551,23 +585,29 @@ def recalculate_main_set(paper_id, changed_by="LLM_Averaged", create_log_entry=T
             is_text = any(_is_real_text(v) for v in values)
             if is_text:
                 seen_lower = set()
-                unique_vals = []
+                unique_items = []
                 # Iterating in order (Set 1 -> Set 3) ensures Set 1's capitalization is kept
                 for v in values:
-                    if isinstance(v, str):
-                        import re
-                        # Strip whitespace and trailing commas/periods to prevent false mismatches
-                        cleaned = v.strip().rstrip(',.')
-                        # Normalize comma spacing and general whitespace so "CNN,RNN" matches "CNN, RNN"
-                        cleaned = re.sub(r'\s*,\s*', ', ', cleaned)
-                        cleaned = re.sub(r'\s+', ' ', cleaned)
-                        if not cleaned:
+                    if not isinstance(v, str):
+                        continue
+                    # Strip whitespace and trailing commas/periods to prevent false mismatches
+                    cleaned = v.strip().rstrip(',.')
+                    # Normalize comma spacing and general whitespace so "CNN,RNN" matches "CNN, RNN"
+                    cleaned = re.sub(r'\s*,\s*', ', ', cleaned)
+                    cleaned = re.sub(r'\s+', ' ', cleaned)
+                    if not cleaned:
+                        continue
+                    # Item-level dedup: sets frequently overlap ("CNN, RNN" + "RNN, YOLO"),
+                    # so merge individual items instead of concatenating whole strings.
+                    for item in re.split(r'[,;]', cleaned):
+                        item = item.strip().rstrip(',.').strip()
+                        if not item:
                             continue
-                        lower_v = cleaned.lower()
-                        if lower_v not in seen_lower:
-                            seen_lower.add(lower_v)
-                            unique_vals.append(cleaned)
-                final_val = "; ".join(unique_vals) if unique_vals else None
+                        key = item.lower()
+                        if key not in seen_lower:
+                            seen_lower.add(key)
+                            unique_items.append(item)
+                final_val = ", ".join(unique_items) if unique_items else None
                 _set_val_by_path(main_classification, path, final_val)
                 certainty_map[path] = 'solid' # Text fields don't conflict, they combine
                 main_output_log[path] = final_val

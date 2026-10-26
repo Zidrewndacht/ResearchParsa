@@ -72,6 +72,72 @@ const tableRenderer = (() => {
         return null;
     }
 
+    // Returns the human-readable label for a classification json_path.
+    // Universal fields are hardcoded; domain fields come from APP_CONFIG.
+    function getFieldLabel(jsonPath) {
+        if (jsonPath === 'is_offtopic') return 'Off-topic';
+        if (jsonPath === 'verified') return 'Verified';
+        for (const group of APP_CONFIG.groups) {
+            if (group.filter_type === 'tri_state' && group.json_path === jsonPath) {
+                return group.label || group.friendly_name || group.name;
+            }
+            if (group.filter_type === 'inclusion' || group.filter_type === 'none') {
+                for (const fd of group.fields || []) {
+                    if (`${group.json_path}.${fd.key}` === jsonPath) {
+                        return fd.label || fd.key;
+                    }
+                }
+            }
+        }
+        return jsonPath;
+    }
+
+    // Derives the full 3-set outcome text from the (value, certainty) pair.
+    // All possible combinations are reconstructed here; see derivation table.
+    function getStateDescription(value, certainty) {
+        // Normalize loose/stringified booleans to true/false/null.
+        let v = null;
+        if (value === true || value === 1 || value === '1' || value === 'true') v = true;
+        else if (value === false || value === 0 || value === '0' || value === 'false') v = false;
+
+        certainty = certainty || 'solid';
+
+        if (certainty === 'conflict') {
+            if (v === true) return 'Contradiction: 2 yes, 1 no';
+            if (v === false) return 'Contradiction: 1 yes, 2 no';
+            return 'Contradiction: 1 yes, 1 no, 1 unknown';
+        }
+        if (certainty === '80') {
+            if (v === true) return 'Uncertain: 2 yes, 1 unknown';
+            if (v === false) return 'Uncertain: 2 no, 1 unknown';
+        }
+        if (certainty === '60') {
+            if (v === true) return 'Uncertain: 1 yes, 2 unknown';
+            if (v === false) return 'Uncertain: 1 no, 2 unknown';
+        }
+        // solid
+        if (v === true)  return 'Yes (3/3 agreement)';
+        if (v === false) return 'No (3/3 agreement)';
+        return 'Unknown (3/3 agreement)';
+    }
+
+    // Simple tooltip: label + yes/no/unknown. Used for text-presence cells
+    // (main table + history) and for history table cells, where the cell's
+    // own icon already conveys the state and the label is the load-bearing
+    // information ("which row am I on?").
+    function buildSimpleCellTitle(jsonPath, value) {
+        const label = getFieldLabel(jsonPath);
+        let v = null;
+        if (value === true || value === 1 || value === '1' || value === 'true') v = true;
+        else if (value === false || value === 0 || value === '0' || value === 'false') v = false;
+        const state = v === true ? 'Yes' : (v === false ? 'No' : 'Unknown');
+        return `${label}\n${state}`;
+    }
+
+    function buildCellTitle(jsonPath, value, certainty) {
+        return `${getFieldLabel(jsonPath)}\n${getStateDescription(value, certainty)}`;
+    }
+
     function getPath(obj, path) {
         if (!obj || !path) return null;
         let cur = obj;
@@ -150,15 +216,17 @@ const tableRenderer = (() => {
         const c = paper.classification || {};
         const cert = paper.main_certainty || {};
         const certainty = cert[path] || 'solid';
+        const val = getBool(c, path);
         const td = document.createElement('td');
         td.className = `status-cell ${editable ? 'editable-status ' : ''}certainty-${certainty}`;
         td.setAttribute('data-field', path);
+        td.title = buildCellTitle(path, val, certainty);
         if (certainty === 'conflict') {
             td.innerHTML = '<span class="conflict-warning">⚠️</span>';
         } else {
             const span = document.createElement('span');
             span.className = 'emoji-content';
-            span.textContent = renderStatus(getBool(c, path));
+            span.textContent = renderStatus(val);
             td.appendChild(span);
         }
         return td;
@@ -172,9 +240,11 @@ const tableRenderer = (() => {
         td.className = `status-cell ${highlight ? 'highlight-status ' : ''}certainty-${certainty}`;
         td.setAttribute('data-field', path);
         const val = getPath(c, path);
+        const present = !!(val && String(val).trim());
+        td.title = buildSimpleCellTitle(path, present); 
         const span = document.createElement('span');
         span.className = 'emoji-content';
-        span.textContent = (val && String(val).trim()) ? '✔️' : '❌';
+        span.textContent = present ? '✔️' : '❌';
         td.appendChild(span);
         return td;
     }
@@ -274,6 +344,7 @@ const tableRenderer = (() => {
         const vTd = document.createElement('td');
         vTd.className = `status-cell ${editable ? 'editable-status ' : ''}certainty-${vCert}`;
         vTd.setAttribute('data-field', 'verified');
+        vTd.title = buildCellTitle('verified', paper.verified, vCert);
         if (vCert === 'conflict') {
             vTd.innerHTML = '<span class="conflict-warning">⚠️</span>';
         } else {
@@ -384,6 +455,11 @@ const tableRenderer = (() => {
         }
         return frag;
     }
-
-    return { renderPaper, renderBatch, computeTotalCols, getTotalCols: () => totalCols, renderStatus, renderVerifiedBy, renderChangedBy, formatRelevance, getPath, getBool, esc };
+    return {
+        renderPaper, renderBatch, computeTotalCols, getTotalCols: () => totalCols,
+        renderStatus, renderVerifiedBy, renderChangedBy, formatRelevance,
+        getPath, getBool, esc,
+        getFieldLabel, getStateDescription, buildCellTitle,
+        buildSimpleCellTitle
+    };
 })();

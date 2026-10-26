@@ -225,6 +225,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('click', function (event) {
         const cell = event.target.closest('.editable-status');
         if (cell) {
+            if (document.body.classList.contains('edit-locked')) return;   // NEW
             const currentText = cell.querySelector('.emoji-content')?.textContent.trim()
                 || cell.textContent.trim();
             const field = cell.getAttribute('data-field');
@@ -291,7 +292,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Find the closest .editable-verify ancestor (handles clicks on <span> inside)
         const cell = event.target.closest('.editable-verify');
         if (!cell) return; // Not a verify cell or child thereof
-
+        if (document.body.classList.contains('edit-locked')) return;
         const currentSpan = cell.querySelector('span');
         if (!currentSpan) return;
 

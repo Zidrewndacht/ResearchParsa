@@ -111,6 +111,14 @@ function applyCertaintyAndUpdates(row, data) {
             const c = row.querySelector(`[data-field="${fieldName}"]`);
             if (c && certainty) {
                 c.classList.add(`certainty-${certainty}`);
+
+                // NEW: keep native title in sync with the new value + certainty.
+                // `verified` lives on the top-level row, everything else in classification.
+                const fieldVal = fieldName === 'verified'
+                    ? data.verified
+                    : tableRenderer.getBool(data.classification, fieldName);
+                c.title = tableRenderer.buildCellTitle(fieldName, fieldVal, certainty);
+
                 const emojiSpan = c.querySelector('.emoji-content');
                 const conflictWarning = c.querySelector('.conflict-warning');
                 if (certainty === 'conflict') {
