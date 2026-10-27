@@ -310,7 +310,7 @@ def main():
         # "queue_manager.py",
         "example_config/config.yaml"
         "example_config/domain_config.yaml"
-        # "README.md",
+        "README.md",
         # "LICENSE",
         
         #### #### # Prompt templates
@@ -330,9 +330,9 @@ def main():
         # "queue_manager/state.py",
 
         #### #### # Meta module
-        # "meta/agreement_core.py",
+        "meta/agreement_core.py",
         # "meta/agreement_human_cli_v1.4.py",
-        # "meta/agreement_3sets_cli_v1.4.py",
+        "meta/agreement_3sets_cli_v1.4.py",
         # "meta/time_power_charts_v1.4.py",
         
         #### #### # Shared module
@@ -348,7 +348,7 @@ def main():
         "web/routes_data.py",
         "web/routes_files.py",
         "web/routes_ui.py",
-        # "web/routes_agreement.py",
+        "web/routes_agreement.py",
         # #### "web/LICENSE",
         
         # #Web static files
@@ -374,13 +374,13 @@ def main():
         # "web/static/js/agreement_report.js",
 
         "web/static/css/style.css",
-        # "web/static/css/agreement_report.css",
+        "web/static/css/agreement_report.css",
         # # "web/static/css/fonts.css",
         
         # #### #### #Web static pdfjs files (kept as previously specified)
-        # "web/static/pdfjs/web/autosave.js",
+        "web/static/pdfjs/web/autosave.js",
         # # "web/static/pdfjs/web/viewer.html",
-        # "web/static/pdfjs/web/viewer_mods.css",
+        "web/static/pdfjs/web/viewer_mods.css",
         
         # #### #### #Web templates
         # "web/templates/agreement_report.html",
@@ -393,8 +393,8 @@ def main():
         "web/templates/shared/papers_table_tfoot.html",
         "web/templates/shared/stats_modal_content.html",
         "web/templates/shared/table_colgroup.html",
-        # "web/templates/static_export/loader.html",
-        # "web/templates/static_export/index_static_export.html",
+        "web/templates/static_export/loader.html",
+        "web/templates/static_export/index_static_export.html",
     ]
     
     # Remove any non-existent files from the list
