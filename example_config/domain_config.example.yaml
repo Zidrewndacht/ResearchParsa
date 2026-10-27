@@ -181,10 +181,21 @@ groups:
       - key: "component_other"
         label: "Comp (Other)"
         highlight: true
+      # cosmetic moved out of PCBA since it also includes bare PCB and soldering cosmetic defects.
+      # - key: "cosmetic"
+      #   label: "Cosmetic"
+      #   highlight: true
+
+  - name: "cosmetic"
+    friendly_name: ""
+    filter_type: inclusion
+    json_path: "features"
+    header_class: "inferred-header-2"
+    fields:
       - key: "cosmetic"
         label: "Cosmetic"
         highlight: true
-
+        
   - name: "other_features"
     friendly_name: "" # no group name because there's no space or reason for it in a single cell.
     filter_type: inclusion

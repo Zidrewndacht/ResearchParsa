@@ -23,6 +23,9 @@ By defining your domain's taxonomy, filters, and prompt templates in a YAML conf
   - A **verifier** LLM scores the classification accuracy and provides reasoning traces. The backend automatically extracts and logs Qwen's native thinking traces (`reasoning_content`) for auditing.
   - An advanced **"Consensus" mode** iteratively re-classifies disputed papers until the verifier agrees or a limit is reached.
 
+- **PDF-Augmented Classification (Full-Text Mode)**  
+  When a paper has a manually attached PDF, the queue manager extracts its text contents and **substitutes it for the BibTeX abstract** in every classify, verify, reclassify, and screen prompt. Papers without a PDF, or whose extraction fails, fall back to the imported abstract.
+
 - **Quick Screening & Meta‑Audits**  
   - **Quick Screening (`/screen`)**: A fast, thinking-disabled triage route designed to flag obviously off-topic papers before expensive full-classification, saving significant compute.
   - **Agent Trace Review**: A per-paper meta-audit button ("Auto Audit traces" in the History view) that sends the complete reasoning logs of the three parallel classifiers to the LLM to identify hallucinations, prompt misreadings, or contradictions. It appends a `trace_review` entry to the main log and **does not** alter the paper's classification.
