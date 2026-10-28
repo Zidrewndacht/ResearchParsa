@@ -366,11 +366,11 @@ def main():
         "web/static/js/filtering/filtering_init.js",
         "web/static/js/filtering/filtering_state.js",
         "web/static/js/ghpages.js",
-        # "web/static/js/stats/stats_core.js",
-        # "web/static/js/stats/stats_generic.js",
-        # "web/static/js/stats/stats_domain.js",
-        # "web/static/js/stats/stats_charts.js",
-        # "web/static/js/stats/stats_latex.js",
+        "web/static/js/stats/stats_core.js",
+        "web/static/js/stats/stats_generic.js",
+        "web/static/js/stats/stats_domain.js",
+        "web/static/js/stats/stats_charts.js",
+        "web/static/js/stats/stats_latex.js",
         # "web/static/js/agreement_report.js",
 
         "web/static/css/style.css",
@@ -378,9 +378,9 @@ def main():
         # # "web/static/css/fonts.css",
         
         # #### #### #Web static pdfjs files (kept as previously specified)
-        "web/static/pdfjs/web/autosave.js",
-        # # "web/static/pdfjs/web/viewer.html",
-        "web/static/pdfjs/web/viewer_mods.css",
+        # "web/static/pdfjs/web/autosave.js",
+        # # # "web/static/pdfjs/web/viewer.html",
+        # "web/static/pdfjs/web/viewer_mods.css",
         
         # #### #### #Web templates
         # "web/templates/agreement_report.html",
