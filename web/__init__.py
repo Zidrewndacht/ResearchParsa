@@ -17,6 +17,8 @@ def create_web_app(db_path):
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
     # Register Jinja filters
+    # these are only used in the history detail tables as of now, since the main table 
+    # was converted to a client-rendered SPA
     app.jinja_env.filters["render_status"] = filters.render_status_filter
     app.jinja_env.filters["render_verified_by"] = filters.render_verified_by_filter
     app.jinja_env.filters["render_changed_by"] = filters.render_changed_by_filter

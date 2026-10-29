@@ -65,6 +65,9 @@ function renderChangedBy(value) {
         // Escape the model name for HTML attribute safety (basic escaping)
         // Using a simple replace for quotes. For more robust escaping, consider a library.
         let escapedModelName = String(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        if (String(value).startsWith('(PDF) ')) {
+            return `<span title="${escapedModelName}">📕</span>`;
+        }
         return `<span title="${escapedModelName}">🖥️</span>`;
     }
 }
@@ -111,6 +114,14 @@ function applyCertaintyAndUpdates(row, data) {
             const c = row.querySelector(`[data-field="${fieldName}"]`);
             if (c && certainty) {
                 c.classList.add(`certainty-${certainty}`);
+
+                // NEW: keep native title in sync with the new value + certainty.
+                // `verified` lives on the top-level row, everything else in classification.
+                const fieldVal = fieldName === 'verified'
+                    ? data.verified
+                    : tableRenderer.getBool(data.classification, fieldName);
+                c.title = tableRenderer.buildCellTitle(fieldName, fieldVal, certainty);
+
                 const emojiSpan = c.querySelector('.emoji-content');
                 const conflictWarning = c.querySelector('.conflict-warning');
                 if (certainty === 'conflict') {

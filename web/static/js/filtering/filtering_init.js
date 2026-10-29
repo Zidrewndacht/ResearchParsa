@@ -16,23 +16,44 @@ function bootApp() {
         _wireEvents();
         applyLocalFilters(() => _handleFocusPaper());
     } else {
-        // Fetch from API with current server-side filter params
-        const params = new URLSearchParams(window.location.search);
+        // The server always renders the effective filter values into the inputs
+        // (URL params when present, config defaults otherwise). Read from the DOM
+        // so a URL with no filter params still applies the filters the UI is
+        // showing, instead of silently fetching the entire database.
         const fetchParams = new URLSearchParams();
-        if (params.has('hide_offtopic')) fetchParams.set('hide_offtopic', params.get('hide_offtopic'));
-        if (params.has('year_from')) fetchParams.set('year_from', params.get('year_from'));
-        if (params.has('year_to')) fetchParams.set('year_to', params.get('year_to'));
-        if (params.has('min_page_count')) fetchParams.set('min_page_count', params.get('min_page_count'));
+        const yearFromEl = document.getElementById('year-from');
+        const yearToEl = document.getElementById('year-to');
+        const minPageEl = document.getElementById('min-page-count');
+        const hideOffEl = document.getElementById('hide-offtopic-checkbox');
+
+        if (hideOffEl) fetchParams.set('hide_offtopic', hideOffEl.checked ? '1' : '0');
+        if (yearFromEl && yearFromEl.value.trim() !== '') {
+            fetchParams.set('year_from', yearFromEl.value.trim());
+        }
+        if (yearToEl && yearToEl.value.trim() !== '') {
+            fetchParams.set('year_to', yearToEl.value.trim());
+        }
+        if (minPageEl && minPageEl.value.trim() !== '') {
+            fetchParams.set('min_page_count', minPageEl.value.trim());
+        }
 
         fetch(`/api/papers?${fetchParams.toString()}`)
             .then(r => r.json())
             .then(data => {
                 papersStore.load(data.papers);
-                // Set total count in footer
+
                 const totalEl = document.getElementById('total-papers-count');
                 if (totalEl) totalEl.textContent = data.total_paper_count;
                 const loadedEl = document.getElementById('loaded-papers-count');
                 if (loadedEl) loadedEl.textContent = data.loaded_count;
+
+                // Keep URL in sync with the server-side filters we just applied,
+                // so a plain reload reproduces the same view.
+                const url = new URL(window.location);
+                for (const [k, v] of fetchParams) {
+                    if (!url.searchParams.has(k)) url.searchParams.set(k, v);
+                }
+                window.history.replaceState({ path: url.pathname + url.search }, '', url);
 
                 initializeClientFilters();
                 _wireEvents();
@@ -44,6 +65,7 @@ function bootApp() {
             });
     }
 }
+
 
 function _wireEvents() {
     hideApprovedCheckbox.addEventListener('change', applyLocalFilters);

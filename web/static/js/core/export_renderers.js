@@ -244,10 +244,12 @@ const exportRenderers = (() => {
 
         function statusCell(path) {
             const certainty = cert[path] || 'solid';
+            const val = getBool(data, path);
+            const title = tableRenderer.buildSimpleCellTitle(path, val);
             if (certainty === 'conflict') {
-                return `<td class="status-cell ${cellClass(path)}"><span class="conflict-warning">⚠️</span></td>`;
+                return `<td class="status-cell ${cellClass(path)}" title="${esc(title)}"><span class="conflict-warning">⚠️</span></td>`;
             }
-            return `<td class="status-cell ${cellClass(path)}"><span class="emoji-content">${renderStatus(getBool(data, path))}</span></td>`;
+            return `<td class="status-cell ${cellClass(path)}" title="${esc(title)}"><span class="emoji-content">${renderStatus(val)}</span></td>`;
         }
 
         let cells = '';
@@ -269,9 +271,10 @@ const exportRenderers = (() => {
                     const path = `${group.json_path}.${fd.key}`;
                     if (fd.render_type === 'text_presence') {
                         const tv = getPath(data, path);
-                        // FIX: .includes()
-                        const changedClass = changed.includes(path) ? ' cell-changed' : ''; 
-                        cells += `<td class="status-cell ${cellClass(path)}"><span class="emoji-content">${(tv && String(tv).trim()) ? '✔️' : '❌'}</span></td>`;
+                        const present = !!(tv && String(tv).trim());
+                        const title = tableRenderer.buildSimpleCellTitle(path, present);
+                        const changedClass = changed.includes(path) ? ' cell-changed' : '';
+                        cells += `<td class="status-cell ${cellClass(path)}" title="${esc(title)}"><span class="emoji-content">${present ? '✔️' : '❌'}</span></td>`;
                     } else {
                         cells += statusCell(path);
                     }
