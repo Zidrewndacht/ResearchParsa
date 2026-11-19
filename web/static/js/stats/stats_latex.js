@@ -1,7 +1,13 @@
 // static/js/stats/stats_latex.js
 /**
  * LaTeX generation logic.
+ * VARIA-Conductor compatible: tabularx at \textwidth, ragged-right X label
+ * columns, \hline rules only, \rowcolor{tableshade} on odd rows (i % 2 == 1),
+ * and NO @{} edge trimming -- @{} shortens the rules while colortbl's
+ * rowcolor still paints the full \tabcolsep-extended span, which is what
+ * made shaded rows wider than the table lines.
  */
+
 function generateLatexJournalsConfs() {
     const papers = papersStore.getFiltered();
     const journalCounts = {};
@@ -28,14 +34,20 @@ function generateLatexJournalsConfs() {
         const escapedName = name.replace(/_/g, "\\_").replace(/&/g, "\\&");
         dataArray.push({ rowContent: `${count} & Conferência & ${escapedName}`, type: 'conference' });
     });
-    const config = { caption: "Veículos de Publicação mais Comuns", label: "cap32_journals_confs_new", headers: ["Artigos", "Tipo de Veículo", "Veículo"], columnSpec: "{@{}llX@{}}", useShading: true };
+    const config = {
+        caption: "Veículos de Publicação mais Comuns",
+        label: "cap32_journals_confs_new",
+        headers: ["\\textbf{Artigos}", "\\textbf{Tipo de Veículo}", "\\textbf{Veículo}"],
+        columnSpec: "{ll>{\\raggedright\\arraybackslash}X}",
+        useShading: true
+    };
     return generateLatexTabularx(dataArray, config);
 }
 
 function generateLatexAuthors() {
     const papers = papersStore.getFiltered();
-    const primaryAuthorCounts = {}; 
-    const surveyAuthorCounts = {};  
+    const primaryAuthorCounts = {};
+    const surveyAuthorCounts = {};
     for (const paper of papers) {
         const isSurvey = papersStore.fieldIsTrue(paper.classification || {}, paper.main_certainty || {}, 'is_survey');
         const authorsText = paper.authors || '';
@@ -49,32 +61,32 @@ function generateLatexAuthors() {
     }
     const filteredPrimaryAuthors = Object.entries(primaryAuthorCounts).filter(([name, count]) => count >= 2).sort((a, b) => b[1] - a[1]);
     const filteredSurveyAuthors = Object.entries(surveyAuthorCounts).filter(([name, count]) => count >= 2).sort((a, b) => b[1] - a[1]);
-    const primaryData = filteredPrimaryAuthors.map(([name, count]) => ({ name: name, count: count }));
-    const surveyData = filteredSurveyAuthors.map(([name, count]) => ({ name: name, count: count }));
-    const maxRows = Math.max(primaryData.length, surveyData.length);
+    const maxRows = Math.max(filteredPrimaryAuthors.length, filteredSurveyAuthors.length);
     const dataArray = [];
     for (let i = 0; i < maxRows; i++) {
-        const primaryRow = primaryData[i];
-        const surveyRow = surveyData[i];
+        const primaryRow = filteredPrimaryAuthors[i];
+        const surveyRow = filteredSurveyAuthors[i];
         let primaryQty = "", primaryAuthor = "", surveyQty = "", surveyAuthor = "";
-        if (primaryRow) { primaryQty = primaryRow.count; primaryAuthor = primaryRow.name.replace(/_/g, "\\_").replace(/&/g, "\\&"); }
-        if (surveyRow) { surveyQty = surveyRow.count; surveyAuthor = surveyRow.name.replace(/_/g, "\\_").replace(/&/g, "\\&"); }
+        if (primaryRow) { primaryQty = primaryRow[1]; primaryAuthor = primaryRow[0].replace(/_/g, "\\_").replace(/&/g, "\\&"); }
+        if (surveyRow) { surveyQty = surveyRow[1]; surveyAuthor = surveyRow[0].replace(/_/g, "\\_").replace(/&/g, "\\&"); }
         dataArray.push({ rowContent: `${primaryQty} & ${primaryAuthor} & ${surveyQty} & ${surveyAuthor}` });
     }
-    let latexCode = "\\begin{table}[ht]\n\\centering\n\\small\n";
+    let latexCode = "\\begin{table}[htbp]\n\\centering\n\\small\n";
     latexCode += "\t\\caption{Autores por tipo de artigo (>=2 ocorrências)}\n\\label{tab:cap32_authors_split}\n";
-    latexCode += "\\begin{tabularx}{\\textwidth}{@{}lX|lX@{}}\n\\toprule\n";
-    latexCode += "\\multicolumn{2}{c}{\\textbf{Artigos primários}} & \\multicolumn{2}{c}{\\textbf{Artigos de revisão}} \\\\\n\\midrule\n";
-    latexCode += "\\textbf{Qtd.} & \\textbf{Autor} & \\textbf{Qtd.} & \\textbf{Autor} \\\\\n\\midrule\n";
+    latexCode += "\\begin{tabularx}{\\textwidth}{l>{\\raggedright\\arraybackslash}X|l>{\\raggedright\\arraybackslash}X}\n\\hline\n";
+    latexCode += "\\multicolumn{2}{c|}{\\textbf{Artigos primários}} & \\multicolumn{2}{c}{\\textbf{Artigos de revisão}} \\\\\n";
+    latexCode += "\\hline\n";
+    latexCode += "\\textbf{Qtd.} & \\textbf{Autor} & \\textbf{Qtd.} & \\textbf{Autor} \\\\\n";
+    latexCode += "\\hline\n";
     dataArray.forEach((item, index) => {
-        if ((index + 1) % 2 === 1) latexCode += "\\rowcolor{tableshade}";
+        if (index % 2 === 1) latexCode += "\\rowcolor{tableshade} ";
         latexCode += item.rowContent + " \\\\\n";
     });
     const allSurveyAuthorsWithCount1 = Object.entries(surveyAuthorCounts).filter(([name, count]) => count === 1);
     if (allSurveyAuthorsWithCount1.length > 0) {
-        latexCode += "\\midrule\n\\multicolumn{4}{l}{\\textit{* Todos os outros autores que publicaram revisões aparecem apenas uma vez.}} \\\\\n";
+        latexCode += "\\hline\n\\multicolumn{4}{l}{\\textit{* Todos os outros autores que publicaram revisões aparecem apenas uma vez.}} \\\\\n";
     }
-    latexCode += "\\bottomrule\n\\end{tabularx}\n\\fonte{\\me{2026}}\n\\end{table}\n";
+    latexCode += "\\hline\n\\end{tabularx}\n\\fonte{\\me{2026}}\n\\end{table}\n";
     return latexCode;
 }
 
@@ -91,9 +103,9 @@ function generateLatexMetrics() {
         const isSurvey = papersStore.fieldIsTrue(paper.classification || {}, paper.main_certainty || {}, 'is_survey');
         if (isSurvey) surveyPaperCount++; else primaryPaperCount++;
         if (journalName) {
-            if (type === 'article') { 
+            if (type === 'article') {
                 if (isSurvey) surveyJournalsSet.add(journalName); else primaryJournalsSet.add(journalName);
-            } else if (type === 'inproceedings' || type === 'proceedings' || type === 'conference') { 
+            } else if (type === 'inproceedings' || type === 'proceedings' || type === 'conference') {
                 if (isSurvey) surveyConfsSet.add(journalName); else primaryConfsSet.add(journalName);
             }
         }
@@ -104,9 +116,9 @@ function generateLatexMetrics() {
         }
     }
     const totalFilteredPapers = primaryPaperCount + surveyPaperCount;
-    const totalJournalsCount = new Set([...primaryJournalsSet, ...surveyJournalsSet]).size; 
-    const totalConfsCount = new Set([...primaryConfsSet, ...surveyConfsSet]).size; 
-    const totalAuthorsCount = new Set([...primaryAuthorsSet, ...surveyAuthorsSet]).size; 
+    const totalJournalsCount = new Set([...primaryJournalsSet, ...surveyJournalsSet]).size;
+    const totalConfsCount = new Set([...primaryConfsSet, ...surveyConfsSet]).size;
+    const totalAuthorsCount = new Set([...primaryAuthorsSet, ...surveyAuthorsSet]).size;
     const metricRows = [
         { label: "Artigos filtrados:", primary: primaryPaperCount, survey: surveyPaperCount, total: totalFilteredPapers },
         { label: "Revistas:", primary: primaryJournalsSet.size, survey: surveyJournalsSet.size, total: totalJournalsCount },
@@ -114,25 +126,31 @@ function generateLatexMetrics() {
         { label: "Autores:", primary: primaryAuthorsSet.size, survey: surveyAuthorsSet.size, total: totalAuthorsCount }
     ];
     const dataArray = metricRows.map(row => {
-        const escapedLabel = row.label.replace(/_/g, "\\_").replace(/&/g, "\\&"); 
+        const escapedLabel = row.label.replace(/_/g, "\\_").replace(/&/g, "\\&");
         return { rowContent: `${escapedLabel} & ${row.primary} & ${row.survey} & ${row.total}` };
     });
-    const config = { caption: "Métricas detalhadas por tipo de artigo", label: "cap32_metrics_detailed", headers: ["Tipo de Métrica", "Primários", "Revisão", "Total"], columnSpec: "{@{}X X X X @{}}", useShading: true };
+    const config = {
+        caption: "Métricas detalhadas por tipo de artigo",
+        label: "cap32_metrics_detailed",
+        headers: ["\\textbf{Tipo de Métrica}", "\\textbf{Primários}", "\\textbf{Revisão}", "\\textbf{Total}"],
+        columnSpec: "{>{\\raggedright\\arraybackslash}X r r r}",
+        useShading: true
+    };
     return generateLatexTabularx(dataArray, config);
 }
 
 function generateLatexTabularx(dataArray, config) {
     const { caption, label, headers, columnSpec, useShading } = config;
     if (!dataArray || dataArray.length === 0) return `% No data available for table: ${caption}\n`;
-    let latexCode = "\\begin{table}[ht]\n\\centering\n\\small\n";
+    let latexCode = "\\begin{table}[htbp]\n\\centering\n\\small\n";
     latexCode += `\t\\caption{${caption}}\n\\label{tab:${label}}\n`;
-    latexCode += `\\begin{tabularx}{\\textwidth}${columnSpec}\n\\toprule\n`;
-    latexCode += headers.join(" & ") + " \\\\\n\\midrule\n";
+    latexCode += `\\begin{tabularx}{\\textwidth}${columnSpec}\n\\hline\n`;
+    latexCode += headers.join(" & ") + " \\\\\n\\hline\n";
     dataArray.forEach((item, index) => {
-        if (useShading && (index + 1) % 2 === 1) latexCode += "\\rowcolor{tableshade}";
-        latexCode += item.rowContent + " \\\\\n"; 
+        if (useShading && index % 2 === 1) latexCode += "\\rowcolor{tableshade} ";
+        latexCode += item.rowContent + " \\\\\n";
     });
-    latexCode += "\\bottomrule\n\\end{tabularx}\n\\fonte{\\me{2026}}\n\\end{table}\n";
+    latexCode += "\\hline\n\\end{tabularx}\n\\fonte{\\me{2026}}\n\\end{table}\n";
     return latexCode;
 }
 
@@ -164,20 +182,20 @@ function generateLatexList(listElementId, caption) {
         }
         tableRows.push(rowCells.join(" & "));
     }
-    let columnSpec = "{@{}";
-    for (let k = 0; k < modelsPerRow; k++) columnSpec += "cX";
-    columnSpec += "@{}}";
-    let latexCode = "\\begin{table}[ht]\n\\centering\n\\small\n";
+    let columnSpec = "{";
+    for (let k = 0; k < modelsPerRow; k++) columnSpec += "c>{\\raggedright\\arraybackslash}X";
+    columnSpec += "}";
+    let latexCode = "\\begin{table}[htbp]\n\\centering\n\\small\n";
     latexCode += `\t\\caption{${caption} (>=2 ocorrências)}\n\\label{tab:${listElementId}_latex}\n`;
-    latexCode += `\\begin{tabularx}{\\textwidth}${columnSpec}\n\\toprule\n`;
+    latexCode += `\\begin{tabularx}{\\textwidth}${columnSpec}\n\\hline\n`;
     let headerCells = [];
     for (let h = 0; h < modelsPerRow; h++) { headerCells.push("\\textbf{Contagem}"); headerCells.push("\\textbf{Nome}"); }
-    latexCode += headerCells.join(" & ") + " \\\\\n\\midrule\n";
+    latexCode += headerCells.join(" & ") + " \\\\\n\\hline\n";
     tableRows.forEach((rowContent, index) => {
-        if ((index + 1) % 2 === 1) latexCode += "\\rowcolor{tableshade}";
+        if (index % 2 === 1) latexCode += "\\rowcolor{tableshade} ";
         latexCode += rowContent + " \\\\\n";
     });
-    latexCode += "\\bottomrule\n\\end{tabularx}\n\\fonte{\\me{2026}}\n\\end{table}\n";
+    latexCode += "\\hline\n\\end{tabularx}\n\\fonte{\\me{2026}}\n\\end{table}\n";
     return latexCode;
 }
 

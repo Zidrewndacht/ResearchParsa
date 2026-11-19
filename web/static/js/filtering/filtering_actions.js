@@ -75,7 +75,7 @@ function copyLatexLongtable() {
 % ----------------------------------------------------------
 \\chapter{Lista completa de artigos julgados como relevantes através do ResearchParsa}
 % ----------------------------------------------------------
-\\definecolor{tableshade}{HTML}{EEEEEE}
+\\providecolor{tableshade}{HTML}{EEEEEE}
 \\scriptsize % Use smaller font to fit more data
 \\begin{longtable}{p{2cm}p{8cm}p{5cm}c c p{6cm}}
 \\textbf{Tipo} & \\textbf{Título} & \\textbf{Autores} & \\textbf{Ano} & \\textbf{Páginas} & \\textbf{Periódico/Conferência} \\\\

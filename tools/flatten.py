@@ -331,9 +331,9 @@ def main():
 
         #### #### # Meta module
         "meta/agreement_core.py",
-        # "meta/agreement_human_cli_v1.4.py",
+        "meta/agreement_human_cli_v1.4.py",
         "meta/agreement_3sets_cli_v1.4.py",
-        # "meta/time_power_charts_v1.4.py",
+        "meta/time_power_charts_v1.4.py",
         
         #### #### # Shared module
         # "shared/__init__.py",
@@ -356,16 +356,16 @@ def main():
         "web/static/js/core/papers_store.js",
         "web/static/js/core/table_renderer.js",
         "web/static/js/core/virtual_scroll.js",
-        "web/static/js/comms/comms_batch.js",
-        "web/static/js/comms/comms_files.js",
-        "web/static/js/comms/comms_rendering.js",
-        "web/static/js/comms/comms_save.js",
-        "web/static/js/comms/comms_views.js",
+        # "web/static/js/comms/comms_batch.js",
+        # "web/static/js/comms/comms_files.js",
+        # "web/static/js/comms/comms_rendering.js",
+        # "web/static/js/comms/comms_save.js",
+        # "web/static/js/comms/comms_views.js",
         "web/static/js/filtering/filtering_actions.js",
         "web/static/js/filtering/filtering_engine.js",
         "web/static/js/filtering/filtering_init.js",
         "web/static/js/filtering/filtering_state.js",
-        "web/static/js/ghpages.js",
+        # "web/static/js/ghpages.js",
         "web/static/js/stats/stats_core.js",
         "web/static/js/stats/stats_generic.js",
         "web/static/js/stats/stats_domain.js",
@@ -383,9 +383,9 @@ def main():
         # "web/static/pdfjs/web/viewer_mods.css",
         
         # #### #### #Web templates
-        # "web/templates/agreement_report.html",
+        "web/templates/agreement_report.html",
         "web/templates/detail_row.html",
-        "web/templates/history_row.html",
+        # "web/templates/history_row.html",
         "web/templates/index.html",
         "web/templates/shared/about_modal_content.html",
         "web/templates/shared/detail_form.html",
